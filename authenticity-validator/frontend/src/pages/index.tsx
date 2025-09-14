@@ -1,8 +1,19 @@
- import { useState } from 'react';
+ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDropzone } from 'react-dropzone';
-import { ArrowUpTrayIcon, DocumentIcon, ShieldCheckIcon } from '@heroicons/react/24/outline';
+import { 
+  ArrowUpTrayIcon, 
+  DocumentIcon, 
+  ShieldCheckIcon,
+  SparklesIcon,
+  ChartBarIcon,
+  ClockIcon,
+  UserGroupIcon,
+  AcademicCapIcon,
+  ArrowRightIcon,
+  CheckCircleIcon
+} from '@heroicons/react/24/outline';
 import Layout from '@/components/Layout/Layout';
 
 export default function Home() {
@@ -10,6 +21,48 @@ export default function Home() {
   const router = useRouter();
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
+  const [currentFeature, setCurrentFeature] = useState(0);
+
+  const features = [
+    {
+      icon: ShieldCheckIcon,
+      title: "AI-Powered Verification",
+      description: "Advanced machine learning algorithms detect forged certificates with 99.9% accuracy",
+      color: "from-blue-500 to-cyan-500"
+    },
+    {
+      icon: DocumentIcon,
+      title: "OCR Text Extraction",
+      description: "Extract and validate text from PDF and image documents automatically",
+      color: "from-purple-500 to-pink-500"
+    },
+    {
+      icon: ChartBarIcon,
+      title: "Real-time Analytics",
+      description: "Comprehensive dashboard with fraud trends and verification statistics",
+      color: "from-green-500 to-emerald-500"
+    },
+    {
+      icon: ClockIcon,
+      title: "Instant Verification",
+      description: "Get verification results in seconds, not days",
+      color: "from-orange-500 to-red-500"
+    }
+  ];
+
+  const stats = [
+    { label: "Certificates Verified", value: "50,000+", icon: CheckCircleIcon },
+    { label: "Fraud Detected", value: "2,500+", icon: ShieldCheckIcon },
+    { label: "Institutions", value: "500+", icon: AcademicCapIcon },
+    { label: "Accuracy Rate", value: "99.9%", icon: ChartBarIcon }
+  ];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentFeature((prev) => (prev + 1) % features.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
 
   const onDrop = async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
@@ -90,33 +143,40 @@ export default function Home() {
     <Layout>
       <div className="min-h-screen bg-gray-50">
         {/* Hero Section */}
-        <div className="bg-white">
-          <div className="max-w-7xl mx-auto py-16 px-4 sm:px-6 lg:px-8">
-            <div className="text-center">
-              <h1 className="text-4xl font-extrabold text-gray-900 sm:text-5xl md:text-6xl">
-                <span className="block">Authenticity Validator</span>
-                <span className="block text-blue-600">for Academia</span>
+        <div className="relative overflow-hidden gradient-bg">
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-600/10 to-purple-600/10"></div>
+          <div className="max-w-7xl mx-auto py-20 px-4 sm:px-6 lg:px-8 relative">
+            <div className="text-center animate-fade-in">
+              <div className="inline-flex items-center px-4 py-2 rounded-full bg-blue-100 text-blue-800 text-sm font-medium mb-6 animate-slide-up">
+                <SparklesIcon className="w-4 h-4 mr-2" />
+                Powered by Advanced AI Technology
+              </div>
+              
+              <h1 className="text-5xl md:text-7xl font-bold text-gray-900 mb-6 animate-slide-up">
+                <span className="gradient-text">Authenticity</span>
+                <br />
+                <span className="gradient-text">Validator</span>
               </h1>
-              <p className="mt-3 max-w-md mx-auto text-base text-gray-500 sm:text-lg md:mt-5 md:text-xl md:max-w-3xl">
-                AI-powered certificate verification system to detect fake degrees and authenticate educational credentials
+              
+              <p className="text-xl md:text-2xl text-gray-600 mb-8 max-w-4xl mx-auto leading-relaxed animate-slide-up">
+                Revolutionary AI-powered certificate verification system that detects fake degrees and authenticates educational credentials with unprecedented accuracy
               </p>
-              <div className="mt-5 max-w-md mx-auto sm:flex sm:justify-center md:mt-8">
-                <div className="rounded-md shadow">
-                  <button
-                    onClick={() => router.push('/login')}
-                    className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 md:py-4 md:text-lg md:px-10"
-                  >
-                    Get Started
-                  </button>
-                </div>
-                <div className="mt-3 rounded-md shadow sm:mt-0 sm:ml-3">
-                  <button
-                    onClick={() => router.push('/dashboard')}
-                    className="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-blue-600 bg-white hover:bg-gray-50 md:py-4 md:text-lg md:px-10"
-                  >
-                    View Dashboard
-                  </button>
-                </div>
+              
+              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-slide-up">
+                <button
+                  onClick={() => router.push('/login')}
+                  className="btn-primary text-lg px-8 py-4 flex items-center group"
+                >
+                  Get Started Free
+                  <ArrowRightIcon className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                </button>
+                
+                <button
+                  onClick={() => router.push('/dashboard')}
+                  className="btn-secondary text-lg px-8 py-4"
+                >
+                  View Dashboard
+                </button>
               </div>
             </div>
           </div>
@@ -125,11 +185,11 @@ export default function Home() {
         {/* Upload Section */}
         {user && (
           <div className="max-w-7xl mx-auto py-16 px-4 sm:px-6 lg:px-8">
-            <div className="text-center">
-              <h2 className="text-3xl font-extrabold text-gray-900">
+            <div className="text-center animate-fade-in">
+              <h2 className="text-4xl font-bold text-gray-900 mb-4">
                 Upload Certificate for Verification
               </h2>
-              <p className="mt-4 text-lg text-gray-600">
+              <p className="text-lg text-gray-600 mb-8">
                 Drag and drop your certificate file or click to browse
               </p>
             </div>
@@ -137,34 +197,58 @@ export default function Home() {
             <div className="mt-8 max-w-2xl mx-auto">
               <div
                 {...getRootProps()}
-                className={`border-2 border-dashed rounded-lg p-12 text-center hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer transition-colors ${
-                  isDragActive ? 'border-blue-400 bg-blue-50' : 'border-gray-300'
+                className={`card card-hover p-12 text-center cursor-pointer transition-all duration-300 ${
+                  isDragActive 
+                    ? 'border-blue-400 bg-gradient-to-br from-blue-50 to-purple-50 scale-105' 
+                    : 'border-gray-300 hover:border-blue-300'
                 }`}
               >
                 <input {...getInputProps()} />
-                <ArrowUpTrayIcon className="mx-auto h-12 w-12 text-gray-400" />
-                <div className="mt-4">
-                  <p className="text-lg font-medium text-gray-900">
+                <div className="flex flex-col items-center">
+                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 transition-all duration-300 ${
+                    isDragActive 
+                      ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white scale-110' 
+                      : 'bg-blue-100 text-blue-600'
+                  }`}>
+                    <ArrowUpTrayIcon className="w-8 h-8" />
+                  </div>
+                  
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">
                     {isDragActive ? 'Drop the file here' : 'Drag and drop your certificate here'}
-                  </p>
-                  <p className="mt-2 text-sm text-gray-500">
+                  </h3>
+                  
+                  <p className="text-gray-500 mb-2">
                     or click to browse files
                   </p>
-                  <p className="mt-1 text-xs text-gray-400">
-                    Supports PDF, JPG, PNG, TIFF (max 10MB)
-                  </p>
+                  
+                  <div className="flex items-center space-x-4 text-sm text-gray-400">
+                    <span className="flex items-center">
+                      <DocumentIcon className="w-4 h-4 mr-1" />
+                      PDF
+                    </span>
+                    <span className="flex items-center">
+                      <DocumentIcon className="w-4 h-4 mr-1" />
+                      JPG
+                    </span>
+                    <span className="flex items-center">
+                      <DocumentIcon className="w-4 h-4 mr-1" />
+                      PNG
+                    </span>
+                    <span className="text-xs">(max 10MB)</span>
+                  </div>
                 </div>
               </div>
 
               {isUploading && (
-                <div className="mt-4">
-                  <div className="bg-gray-200 rounded-full h-2">
+                <div className="mt-6 animate-slide-up">
+                  <div className="progress-bar">
                     <div
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      className="progress-fill"
                       style={{ width: `${uploadProgress}%` }}
                     ></div>
                   </div>
-                  <p className="mt-2 text-sm text-gray-600 text-center">
+                  <p className="mt-3 text-sm text-gray-600 text-center flex items-center justify-center">
+                    <div className="spinner mr-2"></div>
                     Uploading... {uploadProgress}%
                   </p>
                 </div>
@@ -174,81 +258,93 @@ export default function Home() {
         )}
 
         {/* Features Section */}
-        <div className="py-16 bg-white">
+        <div className="py-20 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center">
-              <h2 className="text-3xl font-extrabold text-gray-900">
-                Why Choose Our Verification System?
+            <div className="text-center mb-16 animate-fade-in">
+              <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
+                Why Choose Our Platform?
               </h2>
-              <p className="mt-4 text-lg text-gray-600">
-                Advanced AI technology ensures accurate and reliable certificate verification
+              <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+                Advanced technology meets user-friendly design to deliver the most comprehensive certificate verification solution
               </p>
             </div>
 
-            <div className="mt-16">
-              <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="text-center">
-                  <div className="flex items-center justify-center h-12 w-12 rounded-md bg-blue-500 text-white mx-auto">
-                    <DocumentIcon className="h-6 w-6" />
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+              {features.map((feature, index) => (
+                <div 
+                  key={index}
+                  className={`card card-hover p-8 text-center animate-slide-up ${
+                    currentFeature === index ? 'ring-2 ring-blue-500 shadow-xl' : ''
+                  }`}
+                  style={{ animationDelay: `${index * 0.1}s` }}
+                >
+                  <div className={`w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center bg-gradient-to-r ${feature.color} text-white transition-all duration-300 ${
+                    currentFeature === index ? 'scale-110 shadow-lg' : ''
+                  }`}>
+                    <feature.icon className="w-8 h-8" />
                   </div>
-                  <h3 className="mt-4 text-lg font-medium text-gray-900">OCR Technology</h3>
-                  <p className="mt-2 text-base text-gray-500">
-                    Advanced optical character recognition extracts text from certificates with high accuracy
+                  <h3 className="text-xl font-semibold text-gray-900 mb-4">
+                    {feature.title}
+                  </h3>
+                  <p className="text-gray-600 leading-relaxed">
+                    {feature.description}
                   </p>
                 </div>
-
-                <div className="text-center">
-                  <div className="flex items-center justify-center h-12 w-12 rounded-md bg-blue-500 text-white mx-auto">
-                    <ShieldCheckIcon className="h-6 w-6" />
-                  </div>
-                  <h3 className="mt-4 text-lg font-medium text-gray-900">Tampering Detection</h3>
-                  <p className="mt-2 text-base text-gray-500">
-                    AI-powered algorithms detect digital tampering and forgery attempts
-                  </p>
-                </div>
-
-                <div className="text-center">
-                  <div className="flex items-center justify-center h-12 w-12 rounded-md bg-blue-500 text-white mx-auto">
-                    <DocumentIcon className="h-6 w-6" />
-                  </div>
-                  <h3 className="mt-4 text-lg font-medium text-gray-900">Real-time Verification</h3>
-                  <p className="mt-2 text-base text-gray-500">
-                    Instant verification results with detailed analysis and confidence scores
-                  </p>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         </div>
 
         {/* Stats Section */}
-        <div className="bg-blue-600">
-          <div className="max-w-7xl mx-auto py-16 px-4 sm:px-6 lg:px-8">
-            <div className="text-center">
-              <h2 className="text-3xl font-extrabold text-white">
+        <div className="bg-gradient-to-r from-blue-600 to-purple-600">
+          <div className="max-w-7xl mx-auto py-20 px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-16 animate-fade-in">
+              <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
                 Trusted by Educational Institutions
               </h2>
-              <p className="mt-4 text-lg text-blue-200">
-                Join thousands of institutions using our verification system
+              <p className="text-xl text-blue-100 max-w-3xl mx-auto">
+                Join thousands of institutions using our verification system to ensure academic integrity
               </p>
             </div>
 
-            <div className="mt-16 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="text-center">
-                <div className="text-4xl font-extrabold text-white">10,000+</div>
-                <div className="mt-2 text-lg text-blue-200">Certificates Verified</div>
-              </div>
-              <div className="text-center">
-                <div className="text-4xl font-extrabold text-white">500+</div>
-                <div className="mt-2 text-lg text-blue-200">Institutions</div>
-              </div>
-              <div className="text-center">
-                <div className="text-4xl font-extrabold text-white">99.5%</div>
-                <div className="mt-2 text-lg text-blue-200">Accuracy Rate</div>
-              </div>
-              <div className="text-center">
-                <div className="text-4xl font-extrabold text-white">24/7</div>
-                <div className="mt-2 text-lg text-blue-200">Support</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+              {stats.map((stat, index) => (
+                <div key={index} className="text-center animate-slide-up" style={{ animationDelay: `${index * 0.1}s` }}>
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white/20 flex items-center justify-center">
+                    <stat.icon className="w-8 h-8 text-white" />
+                  </div>
+                  <div className="text-3xl md:text-4xl font-bold text-white mb-2">
+                    {stat.value}
+                  </div>
+                  <div className="text-blue-100 font-medium">
+                    {stat.label}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* CTA Section */}
+        <div className="py-20 bg-gradient-to-br from-gray-50 to-blue-50">
+          <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8">
+            <div className="animate-fade-in">
+              <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
+                Ready to Secure Academic Integrity?
+              </h2>
+              <p className="text-xl text-gray-600 mb-8">
+                Join thousands of institutions already using our platform to verify certificates and prevent fraud
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <button
+                  onClick={() => router.push('/login')}
+                  className="btn-primary text-lg px-8 py-4"
+                >
+                  Start Free Trial
+                </button>
+                <button className="btn-secondary text-lg px-8 py-4">
+                  Contact Sales
+                </button>
               </div>
             </div>
           </div>

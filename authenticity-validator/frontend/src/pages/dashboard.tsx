@@ -103,23 +103,23 @@ export default function Dashboard() {
 
   return (
     <Layout>
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <div className="min-h-screen gradient-bg">
+        <div className="max-w-7xl mx-auto py-8 sm:px-6 lg:px-8">
           {/* Header */}
-          <div className="md:flex md:items-center md:justify-between">
+          <div className="md:flex md:items-center md:justify-between mb-8 animate-fade-in">
             <div className="flex-1 min-w-0">
-              <h2 className="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl sm:truncate">
+              <h2 className="text-4xl font-bold text-gray-900 mb-2">
                 Dashboard
               </h2>
-              <p className="mt-1 text-sm text-gray-500">
-                Welcome back, {user.email}
+              <p className="text-lg text-gray-600">
+                Welcome back, <span className="font-semibold text-blue-600">{user.email}</span>
               </p>
             </div>
             <div className="mt-4 flex md:mt-0 md:ml-4">
               <select
                 value={selectedPeriod}
                 onChange={(e) => setSelectedPeriod(e.target.value)}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
               >
                 <option value="7d">Last 7 days</option>
                 <option value="30d">Last 30 days</option>
@@ -129,122 +129,164 @@ export default function Dashboard() {
           </div>
 
           {/* Stats Cards */}
-          <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <ChartBarIcon className="h-6 w-6 text-gray-400" />
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+            <div className="card card-hover p-6 animate-slide-up">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <div className="w-12 h-12 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 flex items-center justify-center">
+                    <ChartBarIcon className="h-6 w-6 text-white" />
                   </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">
-                        Total Certificates
-                      </dt>
-                      <dd className="text-lg font-medium text-gray-900">
-                        {statsLoading ? '...' : overview.totalCertificates || 0}
-                      </dd>
-                    </dl>
-                  </div>
+                </div>
+                <div className="ml-4 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">
+                      Total Certificates
+                    </dt>
+                    <dd className="text-2xl font-bold text-gray-900">
+                      {statsLoading ? (
+                        <div className="spinner"></div>
+                      ) : (
+                        overview.totalCertificates || 0
+                      )}
+                    </dd>
+                  </dl>
                 </div>
               </div>
             </div>
 
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <CheckCircleIcon className="h-6 w-6 text-green-400" />
+            <div className="card card-hover p-6 animate-slide-up" style={{ animationDelay: '0.1s' }}>
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <div className="w-12 h-12 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 flex items-center justify-center">
+                    <CheckCircleIcon className="h-6 w-6 text-white" />
                   </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">
-                        Verified
-                      </dt>
-                      <dd className="text-lg font-medium text-gray-900">
-                        {statsLoading ? '...' : overview.verifiedCertificates || 0}
-                      </dd>
-                    </dl>
-                  </div>
+                </div>
+                <div className="ml-4 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">
+                      Verified
+                    </dt>
+                    <dd className="text-2xl font-bold text-gray-900">
+                      {statsLoading ? (
+                        <div className="spinner"></div>
+                      ) : (
+                        overview.verifiedCertificates || 0
+                      )}
+                    </dd>
+                  </dl>
                 </div>
               </div>
             </div>
 
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <ExclamationTriangleIcon className="h-6 w-6 text-yellow-400" />
+            <div className="card card-hover p-6 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <div className="w-12 h-12 rounded-lg bg-gradient-to-r from-yellow-500 to-orange-500 flex items-center justify-center">
+                    <ExclamationTriangleIcon className="h-6 w-6 text-white" />
                   </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">
-                        Suspicious
-                      </dt>
-                      <dd className="text-lg font-medium text-gray-900">
-                        {statsLoading ? '...' : overview.suspiciousCertificates || 0}
-                      </dd>
-                    </dl>
-                  </div>
+                </div>
+                <div className="ml-4 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">
+                      Suspicious
+                    </dt>
+                    <dd className="text-2xl font-bold text-gray-900">
+                      {statsLoading ? (
+                        <div className="spinner"></div>
+                      ) : (
+                        overview.suspiciousCertificates || 0
+                      )}
+                    </dd>
+                  </dl>
                 </div>
               </div>
             </div>
 
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <BuildingOfficeIcon className="h-6 w-6 text-blue-400" />
+            <div className="card card-hover p-6 animate-slide-up" style={{ animationDelay: '0.3s' }}>
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <div className="w-12 h-12 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
+                    <BuildingOfficeIcon className="h-6 w-6 text-white" />
                   </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">
-                        Institutions
-                      </dt>
-                      <dd className="text-lg font-medium text-gray-900">
-                        {statsLoading ? '...' : overview.totalInstitutions || 0}
-                      </dd>
-                    </dl>
-                  </div>
+                </div>
+                <div className="ml-4 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">
+                      Institutions
+                    </dt>
+                    <dd className="text-2xl font-bold text-gray-900">
+                      {statsLoading ? (
+                        <div className="spinner"></div>
+                      ) : (
+                        overview.totalInstitutions || 0
+                      )}
+                    </dd>
+                  </dl>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Charts */}
-          <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 mb-8">
             {/* Verification Trends */}
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                Verification Trends
-              </h3>
-              <div className="h-64">
+            <div className="card p-6 animate-slide-up">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-semibold text-gray-900">
+                  Verification Trends
+                </h3>
+                <div className="flex space-x-2">
+                  <div className="flex items-center">
+                    <div className="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
+                    <span className="text-sm text-gray-600">Verified</span>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="w-3 h-3 rounded-full bg-yellow-500 mr-2"></div>
+                    <span className="text-sm text-gray-600">Suspicious</span>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
+                    <span className="text-sm text-gray-600">Fake</span>
+                  </div>
+                </div>
+              </div>
+              <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={trendData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="date" stroke="#666" />
+                    <YAxis stroke="#666" />
+                    <Tooltip 
+                      contentStyle={{
+                        backgroundColor: 'white',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                      }}
+                    />
                     <Line
                       type="monotone"
                       dataKey="verified"
                       stroke="#10B981"
-                      strokeWidth={2}
+                      strokeWidth={3}
                       name="Verified"
+                      dot={{ fill: '#10B981', strokeWidth: 2, r: 4 }}
                     />
                     <Line
                       type="monotone"
                       dataKey="suspicious"
                       stroke="#F59E0B"
-                      strokeWidth={2}
+                      strokeWidth={3}
                       name="Suspicious"
+                      dot={{ fill: '#F59E0B', strokeWidth: 2, r: 4 }}
                     />
                     <Line
                       type="monotone"
                       dataKey="fake"
                       stroke="#EF4444"
-                      strokeWidth={2}
+                      strokeWidth={3}
                       name="Fake"
+                      dot={{ fill: '#EF4444', strokeWidth: 2, r: 4 }}
                     />
                   </LineChart>
                 </ResponsiveContainer>
@@ -252,11 +294,11 @@ export default function Dashboard() {
             </div>
 
             {/* Status Distribution */}
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
+            <div className="card p-6 animate-slide-up" style={{ animationDelay: '0.1s' }}>
+              <h3 className="text-xl font-semibold text-gray-900 mb-6">
                 Status Distribution
               </h3>
-              <div className="h-64">
+              <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -265,7 +307,7 @@ export default function Dashboard() {
                       cy="50%"
                       labelLine={false}
                       label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      outerRadius={80}
+                      outerRadius={100}
                       fill="#8884d8"
                       dataKey="value"
                     >
@@ -273,7 +315,14 @@ export default function Dashboard() {
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip />
+                    <Tooltip 
+                      contentStyle={{
+                        backgroundColor: 'white',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                      }}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
