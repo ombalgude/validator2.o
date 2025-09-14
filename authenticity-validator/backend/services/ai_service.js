@@ -8,7 +8,7 @@ const FormData = require('form-data');
 
 class AIService {
     constructor() {
-        this.aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+        this.aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8001';
         this.timeout = 30000; // 30 seconds timeout
     }
 
