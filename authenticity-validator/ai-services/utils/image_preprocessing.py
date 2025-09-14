@@ -285,3 +285,4 @@ def get_image_metadata(image_data: bytes) -> Dict[str, Any]:
         logger.error(f"Error extracting metadata: {str(e)}")
         return {"error": str(e)}
 
+

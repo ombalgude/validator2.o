@@ -375,3 +375,4 @@ if __name__ == "__main__":
     print("Image Analysis Service for Certificate Verification")
     print("This module provides tampering detection and digital forensics capabilities")
 
+

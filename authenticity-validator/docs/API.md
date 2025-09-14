@@ -344,3 +344,5 @@ const response = await fetch('/api/certificates?verificationStatus=verified&page
 const result = await response.json();
 ```
 
+
+

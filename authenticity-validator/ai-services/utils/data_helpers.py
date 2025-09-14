@@ -357,3 +357,4 @@ def format_certificate_data(data: Dict[str, Any]) -> str:
         logger.error(f"Error formatting certificate data: {str(e)}")
         return str(data)
 
+
