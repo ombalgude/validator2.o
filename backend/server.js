@@ -6,6 +6,7 @@ const rateLimit = require('express-rate-limit');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 require('dotenv').config();
+const connectDB=require("./models/connection")
 
 
 // Import routes
@@ -48,29 +49,25 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/uploads', express.static('uploads'));
 
 // Database connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/authenticity-validator', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log('MongoDB connected successfully'))
-.catch(err => console.error('MongoDB connection error:', err));
+
+connectDB();
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
+  // console.log('User connected:', socket.id);
 
   socket.on('join_room', (room) => {
     socket.join(room);
-    console.log(`User ${socket.id} joined room: ${room}`);
+    // console.log(`User ${socket.id} joined room: ${room}`);
   });
 
   socket.on('leave_room', (room) => {
     socket.leave(room);
-    console.log(`User ${socket.id} left room: ${room}`);
+    // console.log(`User ${socket.id} left room: ${room}`);
   });
 
   socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id);
+    // console.log('User disconnected:', socket.id);
   });
 });
 
@@ -100,7 +97,7 @@ app.use((err, req, res, next) => {
   console.error('Error:', err);
   
   if (err.code === 'LIMIT_FILE_SIZE') {
-    return res.status(400).json({ 
+    return res.status(400).json({
       message: 'File too large. Maximum size is 10MB.' 
     });
   }

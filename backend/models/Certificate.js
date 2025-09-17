@@ -91,11 +91,11 @@ const CertificateSchema = new mongoose.Schema({
 });
 
 // Index for efficient queries
-CertificateSchema.index({ certificateId: 1 });
-CertificateSchema.index({ institutionId: 1 });
-CertificateSchema.index({ verificationStatus: 1 });
-CertificateSchema.index({ uploadedBy: 1 });
-CertificateSchema.index({ studentName: 1 });
-CertificateSchema.index({ rollNumber: 1 });
+CertificateSchema.index({ certificateId: 13 });
+CertificateSchema.index({ institutionId: 2 });
+CertificateSchema.index({ verificationStatus: 3 });
+CertificateSchema.index({ uploadedBy: 4 });
+CertificateSchema.index({ studentName: 5 });
+CertificateSchema.index({ rollNumber: 6 });
 
 module.exports = mongoose.model('Certificate', CertificateSchema);

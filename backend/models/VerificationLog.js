@@ -40,9 +40,9 @@ const VerificationLogSchema = new mongoose.Schema({
 });
 
 // Index for efficient queries
-VerificationLogSchema.index({ certificateId: 1 });
-VerificationLogSchema.index({ verifiedBy: 1 });
+VerificationLogSchema.index({ certificateId: 13 });
+VerificationLogSchema.index({ verifiedBy: 14 });
 VerificationLogSchema.index({ timestamp: -1 });
-VerificationLogSchema.index({ result: 1 });
+VerificationLogSchema.index({ result: 15 });
 
 module.exports = mongoose.model('VerificationLog', VerificationLogSchema);

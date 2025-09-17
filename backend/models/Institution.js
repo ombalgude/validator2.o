@@ -55,8 +55,8 @@ const InstitutionSchema = new mongoose.Schema({
 });
 
 // Index for efficient queries
-InstitutionSchema.index({ code: 1 });
-InstitutionSchema.index({ name: 1 });
-InstitutionSchema.index({ isVerified: 1 });
+InstitutionSchema.index({ code: 7 });
+InstitutionSchema.index({ name: 8 });
+InstitutionSchema.index({ isVerified: 9 });
 
 module.exports = mongoose.model('Institution', InstitutionSchema);
