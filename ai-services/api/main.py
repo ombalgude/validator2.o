@@ -275,4 +275,4 @@ async def complete_verification(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Verification failed: {str(e)}")
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)

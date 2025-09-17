@@ -12,7 +12,7 @@ const router = express.Router();
 // @access  Public
 router.post('/register', validateUserRegistration, async (req, res) => {
   try {
-    const { email, password, role, institutionId, permissions } = req.body;
+    const { email, password } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -27,10 +27,7 @@ router.post('/register', validateUserRegistration, async (req, res) => {
     // Create user
     const user = new User({
       email,
-      password: hashedPassword,
-      role,
-      institutionId: institutionId || null,
-      permissions: permissions || []
+      password: hashedPassword
     });
 
     await user.save();
@@ -58,7 +55,10 @@ router.post('/register', validateUserRegistration, async (req, res) => {
     });
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ message: 'Server error during registration' });
+    if (error && error.code === 11000) {
+      return res.status(400).json({ message: 'User already exists' });
+    }
+    return res.status(500).json({ message: 'Server error during registration', error: error?.message });
   }
 });
 

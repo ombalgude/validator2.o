@@ -17,11 +17,8 @@ const validateUserRegistration = [
     .normalizeEmail()
     .withMessage('Please provide a valid email'),
   body('password')
-    .isLength({ min: 6 })
-    .withMessage('Password must be at least 6 characters long'),
-  body('role')
-    .isIn(['admin', 'institution', 'verifier'])
-    .withMessage('Role must be admin, institution, or verifier'),
+    .isLength({ min: 3 })
+    .withMessage('Password must be at least 3 characters long'),
   handleValidationErrors
 ];
 

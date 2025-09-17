@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* simple helpers */
+.btn { @apply px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50; }
+.card { @apply p-6 bg-white rounded shadow; }
+
+

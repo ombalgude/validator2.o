@@ -15,15 +15,12 @@ const UserSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['admin', 'institution', 'verifier'],
-    required: true
+    default: 'user'
   },
   institutionId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Institution',
-    required: function() {
-      return this.role === 'institution';
-    }
+    required: false
   },
   permissions: [{
     type: String
