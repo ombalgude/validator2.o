@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import Button from "../components/Button";
 
 export default function DashboardPage() {
 	const [stats, setStats] = useState(null);
@@ -121,12 +122,12 @@ export default function DashboardPage() {
 			<div className="card">
 				<div className="flex items-center justify-between">
 					<h2 className="font-medium">Raw Stats</h2>
-					<button
-						className="btn"
+					<Button
+						className=""
 						onClick={() => setShowRaw((s) => !s)}
 					>
 						{showRaw ? "Hide" : "Show"}
-					</button>
+					</Button>
 				</div>
 				{showRaw && (
 					<pre className="mt-3 text-sm overflow-auto">

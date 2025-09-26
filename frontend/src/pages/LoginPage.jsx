@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import Button from "../components/Button";
 
 export default function LoginPage() {
 	const [email, setEmail] = useState("");
@@ -86,12 +87,14 @@ export default function LoginPage() {
 										{error}
 									</div>
 								)}
-								<button
-									className="btn w-full"
+								<Button
+									className="w-full h-full "
 									disabled={loading}
 								>
-									{loading ? "Signing in…" : "Sign in"}
-								</button>
+									<span className="text-lg font-medium">
+										{loading ? "Signing in…" : "Sign in"}
+									</span>
+								</Button>
 								<div className="text-xs text-slate-500 text-center">
 									Institution staff? Use the{" "}
 									<a
