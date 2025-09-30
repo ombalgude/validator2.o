@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { AuthAPI, setToken } from '../lib/api'
+import axios from 'axios'
 
 export default function LoginInstitution() {
   const [email, setEmail] = useState('')
@@ -14,11 +14,12 @@ export default function LoginInstitution() {
     setLoading(true)
     setError('')
     try {
-      const data = await AuthAPI.loginInstitution(email.trim(), password.trim())
-      setToken(data.token)
+      const res = await axios.post('/api/auth/login', { email: email.trim(), password: password.trim() })
+      localStorage.setItem('token', res.data.token)
       navigate('/dashboard', { replace: true })
     } catch (err) {
-      setError(err.message)
+      const msg = err.response?.data?.message || err.message || 'Login failed'
+      setError(msg)
     } finally {
       setLoading(false)
     }

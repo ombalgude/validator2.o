@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { AuthAPI } from '../lib/api'
+import axios from 'axios'
 
 export default function RegisterInstitution() {
   const [email, setEmail] = useState('')
@@ -17,11 +17,12 @@ export default function RegisterInstitution() {
     setError('')
     setSuccess('')
     try {
-      await AuthAPI.registerInstitution(email, password, institutionId)
+      await axios.post('/api/auth/register', { email, password })
       setSuccess('Institution account created. You can now sign in.')
       setTimeout(() => navigate('/login-institution', { replace: true }), 800)
     } catch (err) {
-      setError(err.message)
+      const msg = err.response?.data?.message || err.message || 'Registration failed'
+      setError(msg)
     } finally {
       setLoading(false)
     }

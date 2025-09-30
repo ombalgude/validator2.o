@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { CertificatesAPI } from '../lib/api'
+import axios from 'axios'
 
 export default function UploadPage() {
   const [file, setFile] = useState(null)
@@ -15,10 +15,18 @@ export default function UploadPage() {
     if (!file) { setError('Please select a file'); return }
     setLoading(true)
     try {
-      const data = await CertificatesAPI.upload({ ...form, file })
-      setResult(data)
+      const formData = new FormData()
+      formData.append('certificate', file)
+      formData.append('studentName', form.studentName)
+      formData.append('rollNumber', form.rollNumber)
+      formData.append('course', form.course)
+      formData.append('degree', form.degree)
+      formData.append('issueDate', form.issueDate)
+      const res = await axios.post('/api/certificates/verify', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+      setResult(res.data)
     } catch (err) {
-      setError(err.message)
+      const msg = err.response?.data?.message || err.message || 'Upload failed'
+      setError(msg)
     } finally {
       setLoading(false)
     }
