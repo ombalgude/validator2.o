@@ -33,7 +33,6 @@ const UserSchema = new mongoose.Schema({
 });
 
 // Index for efficient queries
-UserSchema.index({ email: 10 });
 UserSchema.index({ role:11 });
 UserSchema.index({ institutionId: 12 });
 
