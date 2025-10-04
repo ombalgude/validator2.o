@@ -1,5 +1,7 @@
 import React, { useState } from 'react'
 import axios from 'axios'
+import Button from '../components/Button'
+
 
 export default function UploadPage() {
   const [file, setFile] = useState(null)
@@ -45,7 +47,7 @@ export default function UploadPage() {
           <input className="border rounded px-3 py-2" type="file" accept="image/*,application/pdf" onChange={e => setFile(e.target.files?.[0] || null)} />
           {error && <div className="text-red-600 md:col-span-2">{error}</div>}
           <div className="md:col-span-2">
-            <button className="btn" disabled={loading}>{loading ? 'Uploading…' : 'Upload & Verify'}</button>
+            <Button className="btn" disabled={loading}>{loading ? 'Uploading…' : 'Upload & Verify'}</Button>
           </div>
         </form>
       </div>

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import Button from "../components/Button";
 import axios from "axios";
 
 export default function LoginPage() {
@@ -14,14 +15,20 @@ export default function LoginPage() {
 		e.preventDefault();
 		setLoading(true);
 		setError("");
-    try {
-            const res = await axios.post('/api/auth/login', { email, password });
-            localStorage.setItem('token', res.data.token);
-            navigate('/dashboard', { replace: true });
-    } catch (err) {
-            const msg = err.response?.data?.message || err.message || "An error occurred. Please try again.";
-            setError(msg);
-    } finally {
+		try {
+			const res = await axios.post("/api/auth/login", {
+				email,
+				password,
+			});
+			localStorage.setItem("token", res.data.token);
+			navigate("/dashboard", { replace: true });
+		} catch (err) {
+			const msg =
+				err.response?.data?.message ||
+				err.message ||
+				"An error occurred. Please try again.";
+			setError(msg);
+		} finally {
 			setLoading(false);
 		}
 	};
@@ -89,12 +96,14 @@ export default function LoginPage() {
 										{error}
 									</div>
 								)}
-								<button
-									className="w-full btn"
+								<Button
+									className="w-full h-full "
 									disabled={loading}
 								>
-									{loading ? "Signing in…" : "Sign in"}
-								</button>
+									<span className="text-lg font-medium">
+										{loading ? "Signing in…" : "Sign in"}
+									</span>
+								</Button>
 								<div className="text-xs text-center text-slate-500">
 									Institution staff? Use the{" "}
 									<a
