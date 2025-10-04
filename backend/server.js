@@ -82,4 +82,13 @@ process.on('SIGTERM', () => {
   mongoose.connection.close(() => process.exit(0));
 });
 
+// Prevent hard crashes: capture unhandled errors and rejections
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled Promise Rejection:', reason);
+});
+
 module.exports = { app };
