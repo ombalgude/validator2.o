@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react'
-import { CertificatesAPI } from '../lib/api'
+import React, { useEffect, useState } from 'react';
+// import { CertificatesAPI } from '../lib/api'
 
 export default function CertificatesPage() {
   const [data, setData] = useState(null)

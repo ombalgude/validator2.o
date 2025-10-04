@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { AuthAPI, setToken } from '../lib/api'
+import Button from '../components/Button'
+// import { AuthAPI, setToken } from '../lib/api'
 
 export default function LoginInstitution() {
   const [email, setEmail] = useState('')
@@ -54,7 +55,7 @@ export default function LoginInstitution() {
                   <input className="w-full border rounded px-3 py-2" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
                 </div>
                 {error && <div className="text-red-600 text-sm">{error}</div>}
-                <button className="btn w-full" disabled={loading}>{loading ? 'Signing in…' : 'Sign in'}</button>
+                <Button className=" w-full" disabled={loading}>{loading ? 'Signing in…' : 'Sign in'}</Button>
                 <div className="text-xs text-slate-500 text-center">Need access? Contact platform support to onboard your institution.</div>
               </form>
             </div>
