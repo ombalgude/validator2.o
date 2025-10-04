@@ -18,6 +18,7 @@ import LoginPage from "./pages/LoginPage.jsx";
 import Layout from "./components/Layout.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import PrivateRoute from "./components/PrivateRoute.jsx";
+import OCRPage from "./pages/OCRPage.jsx";
 
 export default function App() {
 	const navigate = useNavigate();
@@ -29,6 +30,7 @@ export default function App() {
 	return (
 		<Routes>
 			<Route path="/" element={<Landing />} />
+			<Route path="/demo" element={<OCRPage />} />
 			<Route path="/login" element={<LoginPage />} />
 			<Route path="/login-institution" element={<LoginInstitution />} />
 			<Route path="/register" element={<RegisterUser />} />

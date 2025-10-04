@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import axios from 'axios'
+import Button from '../components/Button'
 
 export default function RegisterInstitution() {
   const [email, setEmail] = useState('')
@@ -56,7 +57,7 @@ export default function RegisterInstitution() {
               </div>
               {error && <div className="text-red-600 text-sm">{error}</div>}
               {success && <div className="text-emerald-600 text-sm">{success}</div>}
-              <button className="btn w-full" disabled={loading}>{loading ? 'Onboarding…' : 'Create institution account'}</button>
+              <Button className="w-full" disabled={loading}>{loading ? 'Onboarding…' : 'Create institution account'}</Button>
             </form>
           </div>
         </div>
