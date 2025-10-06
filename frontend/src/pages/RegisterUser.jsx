@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import axios from 'axios'
 import Button from '../components/Button'
-// import { AuthAPI } from '../lib/api'
 
 export default function RegisterUser() {
   const [email, setEmail] = useState('')
@@ -17,11 +17,12 @@ export default function RegisterUser() {
     setError('')
     setSuccess('')
     try {
-      await AuthAPI.registerUser(email, password)
+      await axios.post('/api/auth/register', { email, password })
       setSuccess('Account created. You can now sign in.')
       setTimeout(() => navigate('/login', { replace: true }), 800)
     } catch (err) {
-      setError(err.message)
+      const msg = err.response?.data?.message || err.message || 'Registration failed'
+      setError(msg)
     } finally {
       setLoading(false)
     }

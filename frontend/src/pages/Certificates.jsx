@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-// import { CertificatesAPI } from '../lib/api'
+import React, { useEffect, useState } from 'react'
+import axios from 'axios'
 
 export default function CertificatesPage() {
   const [data, setData] = useState(null)
@@ -7,9 +7,9 @@ export default function CertificatesPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    CertificatesAPI.list()
-      .then(setData)
-      .catch(err => setError(err.message))
+    axios.get('/api/certificates')
+      .then(res => setData(res.data))
+      .catch(err => setError(err.response?.data?.message || err.message))
       .finally(() => setLoading(false))
   }, [])
 

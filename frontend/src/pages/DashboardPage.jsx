@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import axios from "axios";
 import Button from "../components/Button";
 
 export default function DashboardPage() {
@@ -7,9 +8,10 @@ export default function DashboardPage() {
 	const [showRaw, setShowRaw] = useState(false);
 
 	useEffect(() => {
-		DashboardAPI.stats()
-			.then(setStats)
-			.catch((err) => setError(err.message));
+		axios
+			.get("/api/dashboard/stats")
+			.then((res) => setStats(res.data))
+			.catch((err) => setError(err.response?.data?.message || err.message));
 	}, []);
 
 	const StatCard = ({ title, value, accent }) => (
