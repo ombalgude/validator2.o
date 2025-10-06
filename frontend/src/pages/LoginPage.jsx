@@ -1,7 +1,127 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Button from "../components/Button";
 import axios from "axios";
+import { Link } from "react-router-dom";
+import Button from "../components/Button";
+import {
+	ShieldCheck,
+	Mail,
+	Lock,
+	LogIn,
+	Loader,
+	AlertTriangle,
+} from "lucide-react";
+
+const ParticleCanvas = () => {
+	const canvasRef = useRef(null);
+	const mouse = useRef({
+		x: window.innerWidth / 2,
+		y: window.innerHeight / 2,
+	});
+
+	const handleMouseMove = useCallback((event) => {
+		mouse.current.x = event.clientX;
+		mouse.current.y = event.clientY;
+	}, []);
+
+	useEffect(() => {
+		const canvas = canvasRef.current;
+		const ctx = canvas.getContext("2d");
+		let particlesArray = [];
+
+		const setCanvasSize = () => {
+			canvas.width = window.innerWidth;
+			canvas.height = window.innerHeight;
+		};
+
+		setCanvasSize();
+		window.addEventListener("resize", setCanvasSize);
+		window.addEventListener("mousemove", handleMouseMove);
+
+		class Particle {
+			constructor(x, y, size, color, directionX, directionY) {
+				this.x = x;
+				this.y = y;
+				this.size = size;
+				this.color = color;
+				this.baseX = this.x; // Original position for parallax effect
+				this.baseY = this.y;
+				this.directionX = directionX;
+				this.directionY = directionY;
+			}
+
+			draw() {
+				ctx.beginPath();
+				ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2, false);
+				ctx.fillStyle = this.color;
+				ctx.fill();
+			}
+
+			update() {
+				this.baseX += this.directionX;
+				this.baseY += this.directionY;
+
+				if (this.baseX > canvas.width + this.size)
+					this.baseX = -this.size;
+				if (this.baseX < -this.size)
+					this.baseX = canvas.width + this.size;
+				if (this.baseY > canvas.height + this.size)
+					this.baseY = -this.size;
+				if (this.baseY < -this.size)
+					this.baseY = canvas.height + this.size;
+
+				let dx = mouse.current.x - canvas.width / 2;
+				let dy = mouse.current.y - canvas.height / 2;
+
+				this.x = this.baseX + dx * (this.size / 20);
+				this.y = this.baseY + dy * (this.size / 20);
+
+				this.draw();
+			}
+		}
+
+		const init = () => {
+			particlesArray = [];
+			let numberOfParticles = 300;
+			for (let i = 0; i < numberOfParticles; i++) {
+				let size = Math.random() * 1.5 + 0.5;
+				let x = Math.random() * window.innerWidth;
+				let y = Math.random() * window.innerHeight;
+				let color = `rgba(255, 255, 255, ${Math.random() * 0.5 + 0.3})`;
+
+				let directionY = (Math.random() - 0.5) * 0.3;
+				let directionX = (Math.random() - 0.5) * 0.3;
+
+				particlesArray.push(
+					new Particle(x, y, size, color, directionX, directionY)
+				);
+			}
+		};
+
+		let animationFrameId;
+		const animate = () => {
+			animationFrameId = requestAnimationFrame(animate);
+			ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+			particlesArray.forEach((p) => p.update());
+		};
+
+		init();
+		animate();
+
+		return () => {
+			window.removeEventListener("resize", setCanvasSize);
+			window.removeEventListener("mousemove", handleMouseMove);
+			cancelAnimationFrame(animationFrameId);
+		};
+	}, [handleMouseMove]);
+
+	return (
+		<canvas
+			ref={canvasRef}
+			className="fixed top-0 left-0 w-full h-full -z-10 bg-indigo-950"
+		></canvas>
+	);
+};
 
 export default function LoginPage() {
 	const [email, setEmail] = useState("");
@@ -33,133 +153,132 @@ export default function LoginPage() {
 		}
 	};
 
-	return (
-		<div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
-			<div className="max-w-6xl px-6 pt-10 mx-auto">
-				<div className="flex items-center justify-between">
-					<div className="text-lg font-semibold">
-						Authenticity Validator
-					</div>
-					<div className="text-sm text-slate-600">
-						New here? Ask your institution for access
-					</div>
-				</div>
+	const Feature = ({ icon: Icon, text }) => (
+		<li className="flex items-center gap-3">
+			<div className="flex items-center justify-center w-8 h-8 bg-indigo-500 rounded-full">
+				<Icon className="w-5 h-5 text-white" />
 			</div>
+			<span className="text-indigo-100">{text}</span>
+		</li>
+	);
 
-			<div className="max-w-6xl px-6 py-12 mx-auto">
-				<div className="grid items-center grid-cols-1 gap-8 md:grid-cols-2">
-					<div className="order-2 md:order-1">
-						<div className="mb-6">
-							<h1 className="text-3xl font-bold leading-tight md:text-4xl">
-								Welcome back
-							</h1>
-							<p className="mt-2 text-slate-600">
-								Sign in to verify or manage academic
-								certificates.
-							</p>
+	return (
+		<div className="min-h-screen w-full flex items-center justify-center p-4 font-sans">
+			<ParticleCanvas />
+			<div className="w-full max-w-4xl flex flex-col md:flex-row bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl overflow-hidden animate-fade-in-up">
+				{/* Left Panel: Login Form */}
+				<div className="w-full md:w-1/2 p-8 md:p-12 rounded-2xl rounded-r-none border border-r-0 border-zinc-300/50">
+					<h2 className="text-3xl font-bold text-white mb-2">
+						Welcome Back!
+					</h2>
+					<p className="text-gray-400 mb-8">
+						Please enter your details to sign in.
+					</p>
+
+					<form onSubmit={submit} className="space-y-6">
+						<div>
+							<label className="block mb-1 text-sm font-medium text-gray-400">
+								Email
+							</label>
+							<div className="relative">
+								<Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+								<input
+									className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+									type="email"
+									placeholder="you@example.com"
+									value={email}
+									onChange={(e) => setEmail(e.target.value)}
+									required
+								/>
+							</div>
 						</div>
 
-						<div className="card">
-							<form onSubmit={submit} className="space-y-4">
-								<div>
-									<label className="block mb-1 text-sm text-slate-600">
-										Email
-									</label>
-									<input
-										className="w-full px-3 py-2 border rounded"
-										type="email"
-										placeholder="you@example.com"
-										value={email}
-										onChange={(e) =>
-											setEmail(e.target.value)
-										}
-										required
-									/>
-								</div>
-								<div>
-									<label className="block mb-1 text-sm text-slate-600">
-										Password
-									</label>
-									<input
-										className="w-full px-3 py-2 border rounded"
-										type="password"
-										placeholder="••••••••"
-										value={password}
-										onChange={(e) =>
-											setPassword(e.target.value)
-										}
-										required
-									/>
-								</div>
-								{error && (
-									<div className="text-sm text-red-600">
-										{error}
-									</div>
-								)}
-								<Button
-									className="w-full h-full "
-									disabled={loading}
+						<div>
+							<div className="flex justify-between items-center mb-1">
+								<label className="text-sm font-medium text-gray-400">
+									Password
+								</label>
+								<a
+									href="#"
+									className="text-xs text-indigo-400 hover:underline font-medium"
 								>
-									<span className="text-lg font-medium">
-										{loading ? "Signing in…" : "Sign in"}
-									</span>
-								</Button>
-								<div className="text-xs text-center text-slate-500">
-									Institution staff? Use the{" "}
-									<a
-										className="underline"
-										href="/login-institution"
-									>
-										institution login
-									</a>
-									.
-								</div>
-							</form>
+									Forgot Password?
+								</a>
+							</div>
+							<div className="relative">
+								<Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+								<input
+									className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+									type="password"
+									placeholder="••••••••"
+									value={password}
+									onChange={(e) =>
+										setPassword(e.target.value)
+									}
+									required
+								/>
+							</div>
 						</div>
 
-						<div className="grid grid-cols-1 gap-3 mt-6 sm:grid-cols-3">
-							<div className="p-4 rounded bg-blue-50">
-								<div className="text-xs text-slate-600">
-									Trusted
-								</div>
-								<div className="text-lg font-semibold">
-									250+ orgs
-								</div>
+						{error && (
+							<div className="flex items-center gap-3 bg-red-50 text-red-700 text-sm p-3 rounded-lg">
+								<AlertTriangle className="w-5 h-5" />
+								<span>{error}</span>
 							</div>
-							<div className="p-4 rounded bg-emerald-50">
-								<div className="text-xs text-slate-600">
-									Fast checks
-								</div>
-								<div className="text-lg font-semibold">~6s</div>
-							</div>
-							<div className="p-4 rounded bg-amber-50">
-								<div className="text-xs text-slate-600">
-									High accuracy
-								</div>
-								<div className="text-lg font-semibold">98%</div>
-							</div>
-						</div>
-					</div>
+						)}
 
-					<div className="order-1 md:order-2">
-						<div className="p-6 bg-white border shadow rounded-xl">
-							<div className="flex items-center justify-center w-full rounded aspect-video bg-gradient-to-br from-indigo-100 via-white to-purple-100">
-								<div className="text-center">
-									<div className="text-sm text-slate-500">
-										Preview
-									</div>
-									<div className="mt-1 text-2xl font-semibold">
-										Verify with confidence
-									</div>
-								</div>
-							</div>
-							<ul className="mt-6 space-y-2 text-sm disc-list text-slate-600">
-								<li>• OCR extraction and field validation</li>
-								<li>• Tamper and anomaly detection</li>
-								<li>• Real-time status updates</li>
-							</ul>
+						<Button
+							type="submit"
+							className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white text-lg font-semibold py-3 rounded-lg shadow-md hover:bg-indigo-700 transition-all duration-300 transform hover:-translate-y-0.5 disabled:bg-indigo-400"
+							disabled={loading}
+						>
+							<span>{loading ? "Signing in…" : "Sign in"}</span>
+							{loading ? (
+								<Loader className="animate-spin" />
+							) : (
+								<LogIn className="w-6 h-6" />
+							)}
+						</Button>
+
+						<p className="text-sm text-center text-gray-500">
+							Don't have an account?{" "}
+							<Link
+								to="/register"
+								className="text-indigo-400 hover:underline font-medium"
+							>
+								Sign Up
+							</Link>
+						</p>
+					</form>
+				</div>
+
+				{/* Right Panel: Branding & Features */}
+				<div className="hidden md:flex flex-col justify-between w-full md:w-1/2 p-8 bg-indigo-600 text-white">
+					<div>
+						<div className="font-extrabold text-3xl flex items-center gap-2 mb-8">
+							<ShieldCheck className="w-9 h-9" />
+							ValidX
 						</div>
+						<h1 className="text-4xl font-bold leading-tight mb-4">
+							Unlock the Power of Trust.
+						</h1>
+						<p className="text-indigo-200 leading-relaxed">
+							Sign in to access our industry-leading platform for
+							verifying and managing academic certificates with
+							confidence.
+						</p>
 					</div>
+					<ul className="space-y-4">
+						<Feature
+							icon={ShieldCheck}
+							text="AI-Powered Tamper Detection"
+						/>
+						<Feature
+							icon={LogIn}
+							text="Streamlined Institution Workflows"
+						/>
+						<Feature icon={Mail} text="Real-Time Status Updates" />
+					</ul>
 				</div>
 			</div>
 		</div>
