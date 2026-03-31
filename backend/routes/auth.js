@@ -7,12 +7,31 @@ const { auth } = require('../middleware/auth');
 
 const router = express.Router();
 
+const buildAuthResponse = (user, token, message) => ({
+  message,
+  ...(token ? { token } : {}),
+  user: {
+    id: user._id,
+    fullName: user.fullName,
+    email: user.email,
+    role: user.role,
+    institutionId: user.institutionId,
+    companyName: user.companyName,
+    permissions: user.permissions,
+    isActive: user.isActive,
+    emailVerified: user.emailVerified,
+    lastLogin: user.lastLogin,
+  },
+});
+
 // @route   POST /api/auth/register
 // @desc    Register a new user
 // @access  Public
 router.post('/register', validateUserRegistration, async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    const fullName = typeof req.body.fullName === 'string' ? req.body.fullName.trim() : '';
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -27,7 +46,9 @@ router.post('/register', validateUserRegistration, async (req, res) => {
     // Create user
     const user = new User({
       email,
-      password: hashedPassword
+      password: hashedPassword,
+      fullName,
+      role: 'user',
     });
 
     await user.save();
@@ -43,16 +64,7 @@ router.post('/register', validateUserRegistration, async (req, res) => {
       expiresIn: process.env.JWT_EXPIRE || '7d'
     });
 
-    res.status(201).json({
-      message: 'User registered successfully',
-      token,
-      user: {
-        id: user._id,
-        email: user.email,
-        role: user.role,
-        institutionId: user.institutionId
-      }
-    });
+    res.status(201).json(buildAuthResponse(user, token, 'User registered successfully'));
   } catch (error) {
     console.error('Registration error:', error);
     if (error && error.code === 11000) {
@@ -67,12 +79,17 @@ router.post('/register', validateUserRegistration, async (req, res) => {
 // @access  Public
 router.post('/login', validateUserLogin, async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
 
     // Check if user exists
     const user = await User.findOne({ email }).select('+password');
     if (!user) {
       return res.status(400).json({ message: 'Invalid credentials' });
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({ message: 'Account is inactive' });
     }
 
     // Check password
@@ -96,17 +113,7 @@ router.post('/login', validateUserLogin, async (req, res) => {
       expiresIn: process.env.JWT_EXPIRE || '7d'
     });
 
-    res.json({
-      message: 'Login successful',
-      token,
-      user: {
-        id: user._id,
-        email: user.email,
-        role: user.role,
-        institutionId: user.institutionId,
-        permissions: user.permissions
-      }
-    });
+    res.json(buildAuthResponse(user, token, 'Login successful'));
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ message: 'Server error during login' });
@@ -118,7 +125,10 @@ router.post('/login', validateUserLogin, async (req, res) => {
 // @access  Private
 router.get('/me', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('-password');
+    const user = await User.findById(req.user.id)
+      .select('-password')
+      .populate('institutionId', 'name code institutionType isVerified');
+
     res.json(user);
   } catch (error) {
     console.error('Get user error:', error);

@@ -2,7 +2,10 @@ const express = require('express');
 const crypto = require('crypto');
 const fs = require('fs');
 const Certificate = require('../models/Certificate');
+const Institution = require('../models/Institution');
+const CompanyAdmin = require('../models/company_admin');
 const VerificationLog = require('../models/VerificationLog');
+const Verifier = require('../models/Verifier');
 const { auth, authorize } = require('../middleware/auth');
 const { uploadSingle, uploadMultiple } = require('../middleware/upload');
 const { normalizeCertificateRequest, validateCertificate } = require('../middleware/validation');
@@ -10,13 +13,142 @@ const { normalizeCertificateInput, parseJsonIfNeeded } = require('../utils/certi
 
 const router = express.Router();
 
+const VALID_CERTIFICATE_STATUSES = ['verified', 'suspicious', 'fake', 'pending'];
+const DEFAULT_LIST_LIMIT = 10;
+const MAX_LIST_LIMIT = 100;
+
+const resolveCertificateQuery = (identifier) => {
+  const trimmedIdentifier = String(identifier || '').trim();
+
+  if (!trimmedIdentifier) {
+    return null;
+  }
+
+  if (/^[a-f\d]{24}$/i.test(trimmedIdentifier)) {
+    return { _id: trimmedIdentifier };
+  }
+
+  return { certificateId: trimmedIdentifier.toUpperCase() };
+};
+
+const buildCertificateFilters = async (query, user) => {
+  const filter = {};
+
+  if (query.status) {
+    filter.verificationStatus = query.status;
+  }
+
+  if (query.institutionId) {
+    filter.institutionId = query.institutionId;
+  }
+
+  if (query.studentName) {
+    filter.studentName = { $regex: query.studentName, $options: 'i' };
+  }
+
+  if (query.rollNumber) {
+    filter.rollNumber = { $regex: query.rollNumber, $options: 'i' };
+  }
+
+  if (query.certificateId) {
+    filter.certificateId = String(query.certificateId).trim().toUpperCase();
+  }
+
+  if (query.certificateHash) {
+    filter.certificateHash = String(query.certificateHash).trim().toLowerCase();
+  }
+
+  if (query.dateFrom || query.dateTo) {
+    filter.uploadedAt = {};
+
+    if (query.dateFrom) {
+      filter.uploadedAt.$gte = new Date(query.dateFrom);
+    }
+
+    if (query.dateTo) {
+      filter.uploadedAt.$lte = new Date(query.dateTo);
+    }
+  }
+
+  if (user.role === 'institution_admin' || user.role === 'university_admin') {
+    filter.institutionId = user.institutionId;
+  }
+
+  if (user.role === 'company_admin') {
+    const companyAdminProfile = await CompanyAdmin.findOne({ userId: user._id, isActive: true }).lean();
+
+    if (!companyAdminProfile) {
+      filter._id = null;
+      return filter;
+    }
+
+    if (companyAdminProfile.accessScope === 'specific_institutions') {
+      const scopedInstitutionIds = (companyAdminProfile.institutionIds || []).map(String);
+      filter.institutionId = { $in: scopedInstitutionIds.length > 0 ? scopedInstitutionIds : [null] };
+    } else {
+      const verifiedInstitutionIds = await Institution.find({ isVerified: true }).distinct('_id');
+      filter.institutionId = { $in: verifiedInstitutionIds };
+    }
+  }
+
+  if (user.role === 'verifier') {
+    const verifierProfile = await Verifier.findOne({ userId: user._id, isActive: true }).lean();
+
+    if (!verifierProfile) {
+      filter._id = null;
+      return filter;
+    }
+
+    if (verifierProfile.verifierType !== 'internal') {
+      const scopedInstitutionIds = (verifierProfile.assignedInstitutionIds || []).map(String);
+      filter.institutionId = { $in: scopedInstitutionIds.length > 0 ? scopedInstitutionIds : [null] };
+    }
+  }
+
+  return filter;
+};
+
+const canAccessCertificateForUser = async (user, certificate) => {
+  if (user.role === 'admin') {
+    return true;
+  }
+
+  const scopedFilter = await buildCertificateFilters({}, user);
+  if (scopedFilter._id === null) {
+    return false;
+  }
+
+  if (!scopedFilter.institutionId) {
+    return true;
+  }
+
+  const certificateInstitutionId = String(certificate.institutionId?._id || certificate.institutionId);
+  if (scopedFilter.institutionId.$in) {
+    return scopedFilter.institutionId.$in.map(String).includes(certificateInstitutionId);
+  }
+
+  return String(scopedFilter.institutionId) === certificateInstitutionId;
+};
+
 // @route   POST /api/certificates/verify
 // @desc    Upload and verify a single certificate
 // @access  Private
-router.post('/verify', auth, uploadSingle, normalizeCertificateRequest, validateCertificate, async (req, res) => {
+router.post(
+  '/verify',
+  auth,
+  authorize('admin', 'institution_admin', 'university_admin'),
+  uploadSingle,
+  normalizeCertificateRequest,
+  validateCertificate,
+  async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
+    }
+
+    const institution = await Institution.findById(req.body.institutionId).select('_id');
+    if (!institution) {
+      return res.status(404).json({ message: 'Institution not found' });
     }
 
     const fileBuffer = fs.readFileSync(req.file.path);
@@ -32,6 +164,7 @@ router.post('/verify', auth, uploadSingle, normalizeCertificateRequest, validate
     });
 
     await certificate.save();
+    await Institution.findByIdAndUpdate(certificate.institutionId, { $inc: { totalCertificates: 1 } });
 
     res.status(201).json({
       message: 'Certificate uploaded successfully',
@@ -56,7 +189,7 @@ router.post('/verify', auth, uploadSingle, normalizeCertificateRequest, validate
 // @route   POST /api/certificates/bulk
 // @desc    Upload multiple certificates (for institutions)
 // @access  Private (Institution admin role)
-router.post('/bulk', auth, authorize('institution_admin', 'university_admin'), uploadMultiple, async (req, res) => {
+router.post('/bulk', auth, authorize('admin', 'institution_admin', 'university_admin'), uploadMultiple, async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ message: 'No files uploaded' });
@@ -79,6 +212,15 @@ router.post('/bulk', auth, authorize('institution_admin', 'university_admin'), u
         const normalizedRecord = normalizeCertificateInput(records[index]);
         normalizedRecord.institutionId = normalizedRecord.institutionId || req.user.institutionId;
 
+        if (!normalizedRecord.institutionId) {
+          throw new Error('Institution ID is required for bulk upload');
+        }
+
+        const institutionExists = await Institution.exists({ _id: normalizedRecord.institutionId });
+        if (!institutionExists) {
+          throw new Error('Institution not found');
+        }
+
         const fileBuffer = fs.readFileSync(file.path);
         const documentHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
 
@@ -92,6 +234,7 @@ router.post('/bulk', auth, authorize('institution_admin', 'university_admin'), u
         });
 
         await certificate.save();
+        await Institution.findByIdAndUpdate(certificate.institutionId, { $inc: { totalCertificates: 1 } });
         certificates.push(certificate);
       } catch (error) {
         errors.push({
@@ -124,12 +267,21 @@ router.post('/bulk', auth, authorize('institution_admin', 'university_admin'), u
 // @access  Private
 router.get('/:id', auth, async (req, res) => {
   try {
-    const certificate = await Certificate.findById(req.params.id)
+    const certificateQuery = resolveCertificateQuery(req.params.id);
+    if (!certificateQuery) {
+      return res.status(400).json({ message: 'Certificate identifier is required' });
+    }
+
+    const certificate = await Certificate.findOne(certificateQuery)
       .populate('institutionId', 'name code')
       .populate('uploadedBy', 'email role');
 
     if (!certificate) {
       return res.status(404).json({ message: 'Certificate not found' });
+    }
+
+    if (!(await canAccessCertificateForUser(req.user, certificate))) {
+      return res.status(403).json({ message: 'Access denied for this certificate' });
     }
 
     res.json(certificate);
@@ -145,21 +297,17 @@ router.get('/:id', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 10;
-    const status = req.query.status;
-    const institutionId = req.query.institutionId;
-
-    const filter = {};
-    if (status) filter.verificationStatus = status;
-    if (institutionId) filter.institutionId = institutionId;
-    if (req.user.role === 'institution_admin' || req.user.role === 'university_admin') {
-      filter.institutionId = req.user.institutionId;
-    }
+    const limit = Math.min(parseInt(req.query.limit, 10) || DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT);
+    const sortBy = ['createdAt', 'uploadedAt', 'issueDate', 'studentName', 'certificateId'].includes(req.query.sortBy)
+      ? req.query.sortBy
+      : 'createdAt';
+    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
+    const filter = await buildCertificateFilters(req.query, req.user);
 
     const certificates = await Certificate.find(filter)
       .populate('institutionId', 'name code')
       .populate('uploadedBy', 'email role')
-      .sort({ createdAt: -1 })
+      .sort({ [sortBy]: sortOrder })
       .limit(limit)
       .skip((page - 1) * limit);
 
@@ -182,11 +330,24 @@ router.get('/', auth, async (req, res) => {
 // @access  Private (Admin/Verifier)
 router.put('/:id/verify', auth, authorize('admin', 'verifier', 'company_admin'), async (req, res) => {
   try {
-    const { status, verificationResults } = req.body;
+    const { status, verificationResults, verificationMethod, reason } = req.body;
 
-    const certificate = await Certificate.findById(req.params.id);
+    if (!VALID_CERTIFICATE_STATUSES.includes(status)) {
+      return res.status(400).json({ message: 'Invalid verification status' });
+    }
+
+    const certificateQuery = resolveCertificateQuery(req.params.id);
+    if (!certificateQuery) {
+      return res.status(400).json({ message: 'Certificate identifier is required' });
+    }
+
+    const certificate = await Certificate.findOne(certificateQuery);
     if (!certificate) {
       return res.status(404).json({ message: 'Certificate not found' });
+    }
+
+    if (!(await canAccessCertificateForUser(req.user, certificate))) {
+      return res.status(403).json({ message: 'Access denied for this certificate' });
     }
 
     certificate.verificationStatus = status;
@@ -203,10 +364,13 @@ router.put('/:id/verify', auth, authorize('admin', 'verifier', 'company_admin'),
       result: status,
       ipAddress: req.ip,
       userAgent: req.get('User-Agent'),
-      verificationMethod: 'manual',
+      verificationMethod: verificationMethod || 'manual_review',
       certificateHash: certificate.certificateHash,
       verifierRole: req.user.role,
-      details: verificationResults || {},
+      details: {
+        ...(verificationResults || {}),
+        ...(reason ? { reason: String(reason).trim() } : {}),
+      },
     });
 
     await log.save();
