@@ -1,118 +1,117 @@
 const express = require('express');
 const crypto = require('crypto');
 const fs = require('fs');
-const path = require('path');
 const Certificate = require('../models/Certificate');
-// const Institution = require('../models/Institution');
 const VerificationLog = require('../models/VerificationLog');
 const { auth, authorize } = require('../middleware/auth');
 const { uploadSingle, uploadMultiple } = require('../middleware/upload');
-const { validateCertificate } = require('../middleware/validation');
+const { normalizeCertificateRequest, validateCertificate } = require('../middleware/validation');
+const { normalizeCertificateInput, parseJsonIfNeeded } = require('../utils/certificatePayload');
 
 const router = express.Router();
 
 // @route   POST /api/certificates/verify
 // @desc    Upload and verify a single certificate
 // @access  Private
-router.post('/verify', auth, uploadSingle, validateCertificate, async (req, res) => {
+router.post('/verify', auth, uploadSingle, normalizeCertificateRequest, validateCertificate, async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
     }
 
-    const { studentName, rollNumber, course, degree, issueDate, institutionId } = req.body;
-
-    // Generate certificate ID
-    const certificateId = crypto.randomBytes(16).toString('hex');
-
-    // Calculate file hash
     const fileBuffer = fs.readFileSync(req.file.path);
     const documentHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
 
-    // Create certificate record
     const certificate = new Certificate({
-      certificateId,
-      studentName,
-      rollNumber,
-      institutionId,
-      course,
-      degree,
-      issueDate: new Date(issueDate),
+      ...req.body,
       documentHash,
       uploadedBy: req.user.id,
       filePath: req.file.path,
-      originalFileName: req.file.originalname
+      originalFileName: req.file.originalname,
+      sourceType: 'manual_upload',
     });
 
     await certificate.save();
-
-    // TODO: Trigger AI verification process
-    // This would typically call the AI services to process the certificate
 
     res.status(201).json({
       message: 'Certificate uploaded successfully',
       certificate: {
         id: certificate._id,
         certificateId: certificate.certificateId,
-        status: certificate.verificationStatus
-      }
+        certificateHash: certificate.certificateHash,
+        status: certificate.verificationStatus,
+      },
     });
   } catch (error) {
     console.error('Certificate upload error:', error);
-    res.status(500).json({ message: 'Server error during certificate upload' });
+
+    if (error?.code === 11000) {
+      return res.status(400).json({ message: 'Certificate ID or certificate hash already exists' });
+    }
+
+    return res.status(500).json({ message: 'Server error during certificate upload' });
   }
 });
 
 // @route   POST /api/certificates/bulk
 // @desc    Upload multiple certificates (for institutions)
-// @access  Private (Institution role)
-router.post('/bulk', auth, authorize('institution'), uploadMultiple, async (req, res) => {
+// @access  Private (Institution admin role)
+router.post('/bulk', auth, authorize('institution_admin', 'university_admin'), uploadMultiple, async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ message: 'No files uploaded' });
     }
 
+    const records = parseJsonIfNeeded(req.body.records, []);
+    if (!Array.isArray(records) || records.length !== req.files.length) {
+      return res.status(400).json({
+        message: 'Bulk upload requires a records JSON array with one certificate payload per file',
+      });
+    }
+
     const certificates = [];
     const errors = [];
 
-    for (let i = 0; i < req.files.length; i++) {
+    for (let index = 0; index < req.files.length; index += 1) {
+      const file = req.files[index];
+
       try {
-        const file = req.files[i];
-        const certificateId = crypto.randomBytes(16).toString('hex');
+        const normalizedRecord = normalizeCertificateInput(records[index]);
+        normalizedRecord.institutionId = normalizedRecord.institutionId || req.user.institutionId;
+
         const fileBuffer = fs.readFileSync(file.path);
         const documentHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
 
         const certificate = new Certificate({
-          certificateId,
-          studentName: `Student ${i + 1}`, // This would come from form data
-          rollNumber: `ROLL${i + 1}`,
-          institutionId: req.user.institutionId,
-          course: 'Unknown Course',
-          degree: 'Unknown Degree',
-          issueDate: new Date(),
+          ...normalizedRecord,
           documentHash,
           uploadedBy: req.user.id,
           filePath: file.path,
-          originalFileName: file.originalname
+          originalFileName: file.originalname,
+          sourceType: 'bulk_upload',
         });
 
         await certificate.save();
         certificates.push(certificate);
       } catch (error) {
-        errors.push({ file: req.files[i].originalname, error: error.message });
+        errors.push({
+          file: file.originalname,
+          error: error.message,
+        });
       }
     }
 
     res.status(201).json({
       message: 'Bulk upload completed',
       uploaded: certificates.length,
-      errors: errors.length,
-      certificates: certificates.map(cert => ({
-        id: cert._id,
-        certificateId: cert.certificateId,
-        status: cert.verificationStatus
+      failed: errors.length,
+      certificates: certificates.map((certificate) => ({
+        id: certificate._id,
+        certificateId: certificate.certificateId,
+        certificateHash: certificate.certificateHash,
+        status: certificate.verificationStatus,
       })),
-      errors
+      errors,
     });
   } catch (error) {
     console.error('Bulk upload error:', error);
@@ -145,15 +144,15 @@ router.get('/:id', auth, async (req, res) => {
 // @access  Private
 router.get('/', auth, async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
     const status = req.query.status;
     const institutionId = req.query.institutionId;
 
     const filter = {};
     if (status) filter.verificationStatus = status;
     if (institutionId) filter.institutionId = institutionId;
-    if (req.user.role === 'institution') {
+    if (req.user.role === 'institution_admin' || req.user.role === 'university_admin') {
       filter.institutionId = req.user.institutionId;
     }
 
@@ -161,7 +160,7 @@ router.get('/', auth, async (req, res) => {
       .populate('institutionId', 'name code')
       .populate('uploadedBy', 'email role')
       .sort({ createdAt: -1 })
-      .limit(limit * 1)
+      .limit(limit)
       .skip((page - 1) * limit);
 
     const total = await Certificate.countDocuments(filter);
@@ -170,7 +169,7 @@ router.get('/', auth, async (req, res) => {
       certificates,
       totalPages: Math.ceil(total / limit),
       currentPage: page,
-      total
+      total,
     });
   } catch (error) {
     console.error('Get certificates error:', error);
@@ -181,7 +180,7 @@ router.get('/', auth, async (req, res) => {
 // @route   PUT /api/certificates/:id/verify
 // @desc    Update certificate verification status
 // @access  Private (Admin/Verifier)
-router.put('/:id/verify', auth, authorize('admin', 'verifier'), async (req, res) => {
+router.put('/:id/verify', auth, authorize('admin', 'verifier', 'company_admin'), async (req, res) => {
   try {
     const { status, verificationResults } = req.body;
 
@@ -197,21 +196,24 @@ router.put('/:id/verify', auth, authorize('admin', 'verifier'), async (req, res)
 
     await certificate.save();
 
-    // Log verification
     const log = new VerificationLog({
       certificateId: certificate._id,
       verifiedBy: req.user.id,
+      institutionId: certificate.institutionId,
       result: status,
       ipAddress: req.ip,
       userAgent: req.get('User-Agent'),
-      verificationMethod: 'manual'
+      verificationMethod: 'manual',
+      certificateHash: certificate.certificateHash,
+      verifierRole: req.user.role,
+      details: verificationResults || {},
     });
 
     await log.save();
 
     res.json({
       message: 'Certificate verification updated',
-      certificate
+      certificate,
     });
   } catch (error) {
     console.error('Update verification error:', error);

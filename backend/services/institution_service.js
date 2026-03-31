@@ -374,8 +374,8 @@ class InstitutionService {
             return true;
         }
 
-        // Institution users can access their own institution
-        if (user.role === 'institution' && user.institutionId && 
+        // Institution admins can access their own institution
+        if (user.role === 'institution_admin' && user.institutionId && 
             user.institutionId.toString() === institution._id.toString()) {
             return true;
         }
@@ -409,7 +409,7 @@ class InstitutionService {
         const query = {};
 
         // Apply role-based filtering
-        if (user.role === 'institution' && user.institutionId) {
+        if (user.role === 'institution_admin' && user.institutionId) {
             query._id = user.institutionId;
         }
 

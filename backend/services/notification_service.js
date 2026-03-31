@@ -38,7 +38,7 @@ class NotificationService {
                         institutionId: data.institutionId
                     });
                     socket.join(`user_${data.userId}`);
-                    if (data.role === 'institution' && data.institutionId) {
+                    if (data.role === 'institution_admin' && data.institutionId) {
                         socket.join(`institution_${data.institutionId}`);
                     }
                     if (data.role === 'admin') {

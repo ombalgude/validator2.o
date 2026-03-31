@@ -1,4 +1,5 @@
 const { body, validationResult } = require('express-validator');
+const { normalizeCertificateInput } = require('../utils/certificatePayload');
 
 const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
@@ -17,8 +18,8 @@ const validateUserRegistration = [
     .normalizeEmail()
     .withMessage('Please provide a valid email'),
   body('password')
-    .isLength({ min: 3 })
-    .withMessage('Password must be at least 3 characters long'),
+    .isLength({ min: 8 })
+    .withMessage('Password must be at least 8 characters long'),
   handleValidationErrors
 ];
 
@@ -39,10 +40,12 @@ const validateInstitution = [
     .trim()
     .withMessage('Institution name is required'),
   body('code')
-    .isLength({ min: 2, max: 10 })
-    .isUppercase()
-    .withMessage('Institution code must be 2-10 uppercase characters'),
+    .notEmpty()
+    .trim()
+    .matches(/^[A-Z0-9_-]{2,20}$/)
+    .withMessage('Institution code must be 2-20 uppercase letters, numbers, underscores, or dashes'),
   body('establishedYear')
+    .optional({ values: 'falsy' })
     .isInt({ min: 1800, max: new Date().getFullYear() })
     .withMessage('Please provide a valid establishment year'),
   body('contactInfo.email')
@@ -52,26 +55,61 @@ const validateInstitution = [
   handleValidationErrors
 ];
 
+const normalizeCertificateRequest = (req, _res, next) => {
+  req.body = {
+    ...req.body,
+    ...normalizeCertificateInput(req.body),
+  };
+
+  if (!req.body.institutionId && req.user?.institutionId) {
+    req.body.institutionId = String(req.user.institutionId);
+  }
+
+  next();
+};
+
 const validateCertificate = [
-  body('studentName')
+  body('certificateId')
+    .notEmpty()
+    .trim()
+    .withMessage('Certificate ID is required'),
+  body('student.name')
     .notEmpty()
     .trim()
     .withMessage('Student name is required'),
-  body('rollNumber')
+  body('student.seatNo')
     .notEmpty()
     .trim()
-    .withMessage('Roll number is required'),
-  body('course')
+    .withMessage('Seat number is required'),
+  body('college.code')
+    .notEmpty()
+    .trim()
+    .withMessage('College code is required'),
+  body('college.name')
+    .notEmpty()
+    .trim()
+    .withMessage('College name is required'),
+  body('exam.course')
     .notEmpty()
     .trim()
     .withMessage('Course is required'),
-  body('degree')
+  body('exam.session')
     .notEmpty()
     .trim()
-    .withMessage('Degree is required'),
-  body('issueDate')
-    .isISO8601()
+    .withMessage('Exam session is required'),
+  body('exam.year')
+    .notEmpty()
+    .trim()
+    .withMessage('Exam year is required'),
+  body('issue.date')
+    .custom((value) => !Number.isNaN(new Date(value).getTime()))
     .withMessage('Please provide a valid issue date'),
+  body('subjects')
+    .isArray({ min: 1 })
+    .withMessage('At least one subject is required'),
+  body('institutionId')
+    .isMongoId()
+    .withMessage('Please provide a valid institution ID'),
   handleValidationErrors
 ];
 
@@ -80,6 +118,7 @@ module.exports = {
   validateUserRegistration,
   validateUserLogin,
   validateInstitution,
+  normalizeCertificateRequest,
   validateCertificate
 };
 

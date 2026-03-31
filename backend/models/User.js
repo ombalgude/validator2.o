@@ -1,39 +1,105 @@
 const mongoose = require('mongoose');
 
-const UserSchema = new mongoose.Schema({
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-    lowercase: true,
-    trim: true
+const ROLE_PERMISSIONS = {
+  admin: ['manage_users', 'manage_institutions', 'manage_certificates', 'verify_certificates', 'view_reports'],
+  institution_admin: ['upload_certificates', 'view_own_certificates', 'manage_institution_users'],
+  university_admin: ['upload_certificates', 'view_own_certificates', 'manage_university_records'],
+  company_admin: ['verify_certificates', 'view_verification_logs'],
+  verifier: ['verify_certificates', 'view_certificates'],
+  user: ['view_profile'],
+};
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const UserSchema = new mongoose.Schema(
+  {
+    fullName: {
+      type: String,
+      trim: true,
+      maxlength: 160,
+      default: '',
+    },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+      index: true,
+      match: EMAIL_REGEX,
+    },
+    password: {
+      type: String,
+      required: true,
+      minlength: 8,
+      select: false,
+    },
+    role: {
+      type: String,
+      enum: Object.keys(ROLE_PERMISSIONS),
+      default: 'user',
+      index: true,
+    },
+    institutionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Institution',
+      default: null,
+      index: true,
+    },
+    companyName: {
+      type: String,
+      trim: true,
+      maxlength: 160,
+      default: '',
+    },
+    emailVerified: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    permissions: {
+      type: [String],
+      default: undefined,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+    lastLogin: {
+      type: Date,
+      default: null,
+    },
+    passwordChangedAt: {
+      type: Date,
+      default: Date.now,
+    },
   },
-  password: {
-    type: String,
-    required: true,
-    minlength: 6
-  },
-  role: {
-    type: String,
-    default: 'user'
-  },
-  institutionId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Institution',
-    required: false
-  },
-  permissions: [{
-    type: String
-  }],
-  lastLogin: {
-    type: Date
+  {
+    timestamps: true,
+    minimize: false,
   }
-}, {
-  timestamps: true
+);
+
+UserSchema.pre('validate', function setDefaultPermissions(next) {
+  if (this.isModified('role') || !Array.isArray(this.permissions) || this.permissions.length === 0) {
+    this.permissions = [...(ROLE_PERMISSIONS[this.role] || ROLE_PERMISSIONS.user)];
+  }
+
+  next();
 });
 
-// Index for efficient queries
-UserSchema.index({ role:11 });
-UserSchema.index({ institutionId: 12 });
+UserSchema.index({ role: 1, isActive: 1 });
 
-module.exports = mongoose.model('User', UserSchema);
+UserSchema.methods.hasPermission = function hasPermission(permission) {
+  return Array.isArray(this.permissions) && this.permissions.includes(permission);
+};
+
+UserSchema.set('toJSON', {
+  transform: (_document, returnedObject) => {
+    delete returnedObject.password;
+    return returnedObject;
+  },
+});
+
+module.exports = mongoose.models.User || mongoose.model('User', UserSchema);

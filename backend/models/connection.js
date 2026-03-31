@@ -1,27 +1,25 @@
-const mongoose=require('mongoose')
-const dotenv=require('dotenv')
-dotenv.config();
+const mongoose = require('mongoose');
 
+require('dotenv').config();
 
+const connectDB = async () => {
+  const mongoUri =
+    process.env.MONGODB_URI ||
+    process.env.MONGO_URI ||
+    'mongodb://127.0.0.1:27017/authenticity-validator';
 
-const connectDB = async (retries = 5, delayMs = 3000) => {
-    let attempt = 0;
-    while (attempt < retries) {
-        try {
-            const connectionInstance = await mongoose.connect(`${process.env.MONGODB_URI}`);
-            console.log(`\n MongoDB connected !! DB HOST: ${connectionInstance.connection.name}`);
-            return connectionInstance;
-        } catch (error) {
-            attempt += 1;
-            const message = error && (error.message || error);
-            console.error(`MONGODB connection FAILED (attempt ${attempt}/${retries}):`, message);
-            if (attempt >= retries) {
-                console.error('Exceeded maximum retry attempts. Continuing without DB connection.');
-                return null;
-            }
-            await new Promise(r => setTimeout(r, delayMs));
-        }
-    }
-}
+  if (mongoose.connection.readyState === 1) {
+    return mongoose.connection;
+  }
+
+  try {
+    const connection = await mongoose.connect(mongoUri);
+    console.log(`MongoDB connected: ${connection.connection.name}`);
+    return connection;
+  } catch (error) {
+    console.error('MongoDB connection failed:', error?.message || error);
+    throw error;
+  }
+};
 
 module.exports = connectDB;

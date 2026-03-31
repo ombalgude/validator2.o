@@ -27,7 +27,10 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/uploads', express.static('uploads'));
 
 // Database connection
-connectDB();
+connectDB().catch((error) => {
+  console.error('Failed to connect to MongoDB:', error?.message || error);
+  process.exit(1);
+});
 
 // Routes
 app.use('/api/auth', authRoutes);

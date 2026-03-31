@@ -239,3 +239,7 @@ tmp/
 .DS_Store
 Thumbs.db
 echo "*.md"
+
+*.mp4
+
+frontend/src/assets/media/video/*.mp4

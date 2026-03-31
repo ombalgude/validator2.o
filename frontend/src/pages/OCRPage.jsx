@@ -63,11 +63,25 @@ const OCRPage = () => {
 
 		setOcrResult("Recognizing...");
 
-		const worker = workerRef.current;
-		const response = await worker.recognize(imageData);
-		setOcrResult(response.data.text);
-		console.log("OCR Result:", response.data);
-		setIsOpenModal(true);
+		try {
+			const worker = workerRef.current;
+			const response = await worker.recognize(imageData);
+			
+			const extractedText = response.data.text;
+			const confidenceScore = response.data.confidence; 
+			
+			setOcrResult(extractedText);
+			console.log("OCR Result:", response.data);
+			
+			await sendDataForAnalysis(extractedText, confidenceScore);
+			
+			setIsOpenModal(true);
+		} catch (error) {
+			console.error("OCR Error:", error);
+			setStatusText("Failed to extract text.");
+		} finally {
+			setIsLoading(false);
+		}
 	};
 
 	const [isDragging, setIsDragging] = useState(false);
@@ -99,6 +113,33 @@ const OCRPage = () => {
 	const dragOverClasses = isDragging
 		? "border-blue-500 bg-gray-700"
 		: "border-gray-600";
+
+	const sendDataForAnalysis = async (extractedText, confidenceScore) => {
+		try {
+			const aiAnalysisUrl = "http://localhost:8001/ai/process-ocr"; 
+			
+			const response = await fetch(aiAnalysisUrl, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					raw_text: extractedText,
+					confidence: confidenceScore
+				}),
+			});
+
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+
+			const data = await response.json();
+			console.log("Validation from backend:", data);
+
+		} catch (error) {
+			console.error("Error sending OCR data to backend:", error);
+		}
+	};
 
 	return (
 		<div className="min-h-screen w-full flex flex-col bg-gradient-to-br from-indigo-50 to-purple-50 text-gray-800 font-product-sans">
@@ -233,7 +274,7 @@ const OCRPage = () => {
 			</main>
 			<AppFooter />
 			{/* <ValidModal isOpen={isOpenModal} /> */}
-			<InvalidModal isOpen={isOpenModal} />
+			{/* <InvalidModal isOpen={isOpenModal} /> */}
 		</div>
 	);
 };
