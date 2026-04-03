@@ -13,6 +13,8 @@ const institutionRoutes = require('./routes/institutions');
 const dashboardRoutes = require('./routes/dashboard');
 const verificationLogRoutes = require('./routes/verificationLogs');
 const accessRoutes = require('./routes/access');
+const adminBlockchainRoutes = require("./routes/admin.blockchain");
+const verifyRoutes = require("./routes/verify.route");
 
 const createApp = () => {
   const app = express();
@@ -38,6 +40,8 @@ const createApp = () => {
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/verification-logs', verificationLogRoutes);
   app.use('/api/access', accessRoutes);
+  app.use("/api/admin/blockchain", adminBlockchainRoutes);
+  app.use("/api/verify", verifyRoutes);
 
   // Health check endpoint
   app.get('/api/health', (req, res) => {
