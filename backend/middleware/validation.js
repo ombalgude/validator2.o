@@ -12,6 +12,52 @@ const handleValidationErrors = (req, res, next) => {
   next();
 };
 
+const certificateContentValidationRules = [
+  body('certificateId')
+    .notEmpty()
+    .trim()
+    .withMessage('Certificate ID is required'),
+  body('student.name')
+    .notEmpty()
+    .trim()
+    .withMessage('Student name is required'),
+  body('student.seatNo')
+    .notEmpty()
+    .trim()
+    .withMessage('Seat number is required'),
+  body('college.code')
+    .notEmpty()
+    .trim()
+    .withMessage('College code is required'),
+  body('college.name')
+    .notEmpty()
+    .trim()
+    .withMessage('College name is required'),
+  body('exam.course')
+    .notEmpty()
+    .trim()
+    .withMessage('Course is required'),
+  body('exam.session')
+    .notEmpty()
+    .trim()
+    .withMessage('Exam session is required'),
+  body('exam.year')
+    .notEmpty()
+    .trim()
+    .withMessage('Exam year is required'),
+  body('issue.date')
+    .custom((value) => !Number.isNaN(new Date(value).getTime()))
+    .withMessage('Please provide a valid issue date'),
+  body('subjects')
+    .isArray({ min: 1 })
+    .withMessage('At least one subject is required'),
+];
+
+const buildNormalizedCertificateBody = (body) => ({
+  ...body,
+  ...normalizeCertificateInput(body),
+});
+
 const validateUserRegistration = [
   body('email')
     .isEmail()
@@ -56,10 +102,7 @@ const validateInstitution = [
 ];
 
 const normalizeCertificateRequest = (req, _res, next) => {
-  req.body = {
-    ...req.body,
-    ...normalizeCertificateInput(req.body),
-  };
+  req.body = buildNormalizedCertificateBody(req.body);
 
   if (!req.body.institutionId && req.user?.institutionId) {
     req.body.institutionId = String(req.user.institutionId);
@@ -68,48 +111,22 @@ const normalizeCertificateRequest = (req, _res, next) => {
   next();
 };
 
+const normalizeCertificateComparisonRequest = (req, _res, next) => {
+  req.body = buildNormalizedCertificateBody(req.body);
+
+  next();
+};
+
 const validateCertificate = [
-  body('certificateId')
-    .notEmpty()
-    .trim()
-    .withMessage('Certificate ID is required'),
-  body('student.name')
-    .notEmpty()
-    .trim()
-    .withMessage('Student name is required'),
-  body('student.seatNo')
-    .notEmpty()
-    .trim()
-    .withMessage('Seat number is required'),
-  body('college.code')
-    .notEmpty()
-    .trim()
-    .withMessage('College code is required'),
-  body('college.name')
-    .notEmpty()
-    .trim()
-    .withMessage('College name is required'),
-  body('exam.course')
-    .notEmpty()
-    .trim()
-    .withMessage('Course is required'),
-  body('exam.session')
-    .notEmpty()
-    .trim()
-    .withMessage('Exam session is required'),
-  body('exam.year')
-    .notEmpty()
-    .trim()
-    .withMessage('Exam year is required'),
-  body('issue.date')
-    .custom((value) => !Number.isNaN(new Date(value).getTime()))
-    .withMessage('Please provide a valid issue date'),
-  body('subjects')
-    .isArray({ min: 1 })
-    .withMessage('At least one subject is required'),
+  ...certificateContentValidationRules,
   body('institutionId')
     .isMongoId()
     .withMessage('Please provide a valid institution ID'),
+  handleValidationErrors
+];
+
+const validateCertificateComparison = [
+  ...certificateContentValidationRules,
   handleValidationErrors
 ];
 
@@ -119,6 +136,8 @@ module.exports = {
   validateUserLogin,
   validateInstitution,
   normalizeCertificateRequest,
-  validateCertificate
+  normalizeCertificateComparisonRequest,
+  validateCertificate,
+  validateCertificateComparison
 };
 

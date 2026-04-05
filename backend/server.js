@@ -16,8 +16,35 @@ const institutionRoutes = require('./routes/institutions');
 const dashboardRoutes = require('./routes/dashboard');
 const verificationLogRoutes = require('./routes/verificationLogs');
 const accessRoutes = require('./routes/access');
-const adminBlockchainRoutes = require("./routes/admin.blockchain");
-const verifyRoutes = require("./routes/verify.route");
+
+const createUnavailableFeatureRouter = (message) => {
+  const router = express.Router();
+
+  router.use((_req, res) => {
+    res.status(503).json({ message });
+  });
+
+  return router;
+};
+
+const loadOptionalRoute = (modulePath, unavailableMessage) => {
+  try {
+    return require(modulePath);
+  } catch (error) {
+    console.warn(`Optional route "${modulePath}" is unavailable: ${error.message}`);
+    return createUnavailableFeatureRouter(unavailableMessage);
+  }
+};
+
+const adminBlockchainRoutes = loadOptionalRoute(
+  './routes/admin.blockchain',
+  'Blockchain admin routes are unavailable in this environment'
+);
+
+const verifyRoutes = loadOptionalRoute(
+  './routes/verify.route',
+  'Blockchain verification routes are unavailable in this environment'
+);
 
 const createApp = () => {
   const app = express();
