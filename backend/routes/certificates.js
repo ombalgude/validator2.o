@@ -3,13 +3,12 @@ const crypto = require('crypto');
 const fs = require('fs');
 const Certificate = require('../models/Certificate');
 const Institution = require('../models/Institution');
-const CompanyAdmin = require('../models/company_admin');
 const VerificationLog = require('../models/VerificationLog');
-const Verifier = require('../models/Verifier');
 const { auth, authorize } = require('../middleware/auth');
 const { uploadSingle, uploadMultiple } = require('../middleware/upload');
 const { normalizeCertificateRequest, validateCertificate } = require('../middleware/validation');
 const { normalizeCertificateInput, parseJsonIfNeeded } = require('../utils/certificatePayload');
+const { buildInstitutionScopedFilter, canUserAccessInstitution } = require('../utils/institutionScope');
 
 const router = express.Router();
 
@@ -70,64 +69,11 @@ const buildCertificateFilters = async (query, user) => {
     }
   }
 
-  if (user.role === 'institution_admin' || user.role === 'university_admin') {
-    filter.institutionId = user.institutionId;
-  }
-
-  if (user.role === 'company_admin') {
-    const companyAdminProfile = await CompanyAdmin.findOne({ userId: user._id, isActive: true }).lean();
-
-    if (!companyAdminProfile) {
-      filter._id = null;
-      return filter;
-    }
-
-    if (companyAdminProfile.accessScope === 'specific_institutions') {
-      const scopedInstitutionIds = (companyAdminProfile.institutionIds || []).map(String);
-      filter.institutionId = { $in: scopedInstitutionIds.length > 0 ? scopedInstitutionIds : [null] };
-    } else {
-      const verifiedInstitutionIds = await Institution.find({ isVerified: true }).distinct('_id');
-      filter.institutionId = { $in: verifiedInstitutionIds };
-    }
-  }
-
-  if (user.role === 'verifier') {
-    const verifierProfile = await Verifier.findOne({ userId: user._id, isActive: true }).lean();
-
-    if (!verifierProfile) {
-      filter._id = null;
-      return filter;
-    }
-
-    if (verifierProfile.verifierType !== 'internal') {
-      const scopedInstitutionIds = (verifierProfile.assignedInstitutionIds || []).map(String);
-      filter.institutionId = { $in: scopedInstitutionIds.length > 0 ? scopedInstitutionIds : [null] };
-    }
-  }
-
-  return filter;
+  return buildInstitutionScopedFilter(filter, user);
 };
 
 const canAccessCertificateForUser = async (user, certificate) => {
-  if (user.role === 'admin') {
-    return true;
-  }
-
-  const scopedFilter = await buildCertificateFilters({}, user);
-  if (scopedFilter._id === null) {
-    return false;
-  }
-
-  if (!scopedFilter.institutionId) {
-    return true;
-  }
-
-  const certificateInstitutionId = String(certificate.institutionId?._id || certificate.institutionId);
-  if (scopedFilter.institutionId.$in) {
-    return scopedFilter.institutionId.$in.map(String).includes(certificateInstitutionId);
-  }
-
-  return String(scopedFilter.institutionId) === certificateInstitutionId;
+  return canUserAccessInstitution(user, certificate.institutionId?._id || certificate.institutionId);
 };
 
 // @route   POST /api/certificates/verify

@@ -1,8 +1,11 @@
 const express = require('express');
+const http = require('http');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const { Server: SocketIOServer } = require('socket.io');
 require('dotenv').config();
 const connectDB = require('./models/connection');
+const notificationService = require('./services/notification_instance');
 
 
 // Import routes
@@ -18,10 +21,11 @@ const verifyRoutes = require("./routes/verify.route");
 
 const createApp = () => {
   const app = express();
+  const frontendOrigin = process.env.FRONTEND_URL || 'http://localhost:3000';
 
   // CORS configuration
   app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: frontendOrigin,
     credentials: true
   }));
 
@@ -82,6 +86,20 @@ const createApp = () => {
   return app;
 };
 
+const createRealtimeServer = (app) => {
+  const server = http.createServer(app);
+  const io = new SocketIOServer(server, {
+    cors: {
+      origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+      credentials: true,
+    },
+  });
+
+  notificationService.initialize(io);
+
+  return { server, io };
+};
+
 const registerProcessHandlers = () => {
   if (registerProcessHandlers.isRegistered) {
     return;
@@ -114,12 +132,17 @@ const startServer = async (app = createApp()) => {
   registerProcessHandlers();
 
   const PORT = process.env.PORT || 5000;
-  const server = app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  const { server, io } = createRealtimeServer(app);
+
+  await new Promise((resolve) => {
+    server.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      resolve();
+    });
   });
 
-  return { app, server };
+  return { app, server, io };
 };
 
 const app = createApp();
@@ -128,4 +151,4 @@ if (require.main === module) {
   startServer(app);
 }
 
-module.exports = { app, createApp, startServer };
+module.exports = { app, createApp, createRealtimeServer, startServer };
