@@ -1,17 +1,21 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import axios from "axios";
-import { Link } from "react-router-dom";
+import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import Button from "../components/Button";
 import {
-	ShieldCheck,
-	Mail,
+	AlertTriangle,
+	Loader,
 	Lock,
 	LogIn,
-	Loader,
-	AlertTriangle,
+	Mail,
+	ShieldCheck,
 } from "lucide-react";
 import { ParticleCanvas } from "../components/ParticalCanvas";
+import useAuth from "../hooks/useAuth";
+import { getDefaultRouteForRole } from "../lib/roles";
+
+function getErrorMessage(error, fallback) {
+	return error?.response?.data?.message || error?.message || fallback;
+}
 
 export default function LoginPage() {
 	const [email, setEmail] = useState("");
@@ -19,29 +23,31 @@ export default function LoginPage() {
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
 	const navigate = useNavigate();
-	const url = "http://localhost:5000/api";
+	const { login } = useAuth();
 
-	const submit = async (e) => {
-		e.preventDefault();
+	async function submit(event) {
+		event.preventDefault();
 		setLoading(true);
 		setError("");
+
 		try {
-			const res = await axios.post("/api/auth/login", {
-				email,
+			const currentUser = await login({
+				email: email.trim(),
 				password,
 			});
-			localStorage.setItem("token", res.data.token);
-			navigate("/dashboard", { replace: true });
-		} catch (err) {
-			const msg =
-				err.response?.data?.message ||
-				err.message ||
-				"An error occurred. Please try again.";
-			setError(msg);
+
+			navigate(getDefaultRouteForRole(currentUser?.role), { replace: true });
+		} catch (requestError) {
+			setError(
+				getErrorMessage(
+					requestError,
+					"Unable to sign in right now. Please try again."
+				)
+			);
 		} finally {
 			setLoading(false);
 		}
-	};
+	}
 
 	const Feature = ({ icon: Icon, text }) => (
 		<li className="flex items-center gap-3">
@@ -56,13 +62,11 @@ export default function LoginPage() {
 		<div className="min-h-screen w-full flex items-center justify-center p-4 font-sans">
 			<ParticleCanvas />
 			<div className="w-full max-w-4xl flex flex-col md:flex-row bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl overflow-hidden animate-fade-in-up">
-				{/* Left Panel: Login Form */}
 				<div className="w-full md:w-1/2 p-8 md:p-12 rounded-2xl rounded-r-none border border-r-0 border-zinc-300/50">
-					<h2 className="text-3xl font-bold text-white mb-2">
-						Welcome Back!
-					</h2>
+					<h2 className="text-3xl font-bold text-white mb-2">Welcome Back</h2>
 					<p className="text-gray-400 mb-8">
-						Please enter your details to sign in.
+						Sign in to load your session, sync your access profile, and continue
+						from your role-specific workspace.
 					</p>
 
 					<form onSubmit={submit} className="space-y-6">
@@ -77,72 +81,57 @@ export default function LoginPage() {
 									type="email"
 									placeholder="you@example.com"
 									value={email}
-									onChange={(e) => setEmail(e.target.value)}
+									onChange={(event) => setEmail(event.target.value)}
 									required
 								/>
 							</div>
 						</div>
 
 						<div>
-							<div className="flex justify-between items-center mb-1">
-								<label className="text-sm font-medium text-gray-400">
-									Password
-								</label>
-								<a
-									href="#"
-									className="text-xs text-indigo-400 hover:underline font-medium"
-								>
-									Forgot Password?
-								</a>
-							</div>
+							<label className="block mb-1 text-sm font-medium text-gray-400">
+								Password
+							</label>
 							<div className="relative">
 								<Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
 								<input
 									className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
 									type="password"
-									placeholder="••••••••"
+									placeholder="********"
 									value={password}
-									onChange={(e) =>
-										setPassword(e.target.value)
-									}
+									onChange={(event) => setPassword(event.target.value)}
 									required
 								/>
 							</div>
 						</div>
 
-						{error && (
+						{error ? (
 							<div className="flex items-center gap-3 bg-red-50 text-red-700 text-sm p-3 rounded-lg">
 								<AlertTriangle className="w-5 h-5" />
 								<span>{error}</span>
 							</div>
-						)}
+						) : null}
 
 						<Button
 							type="submit"
-							className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white text-lg font-semibold py-3 rounded-lg shadow-md hover:bg-indigo-700 transition-all duration-300 transform hover:-translate-y-0.5 disabled:bg-indigo-400"
+							className="w-full justify-center bg-indigo-600 text-white text-lg font-semibold py-3 rounded-lg shadow-md hover:bg-indigo-700 disabled:bg-indigo-400"
 							disabled={loading}
 						>
-							<span>{loading ? "Signing in…" : "Sign in"}</span>
-							{loading ? (
-								<Loader className="animate-spin" />
-							) : (
-								<LogIn className="w-6 h-6" />
-							)}
+							<span>{loading ? "Signing in..." : "Sign in"}</span>
+							{loading ? <Loader className="animate-spin" /> : <LogIn className="w-6 h-6" />}
 						</Button>
 
 						<p className="text-sm text-center text-gray-500">
-							Don't have an account?{" "}
+							Need an account?{" "}
 							<Link
 								to="/register"
 								className="text-indigo-400 hover:underline font-medium"
 							>
-								Sign Up
+								Create one
 							</Link>
 						</p>
 					</form>
 				</div>
 
-				{/* Right Panel: Branding & Features */}
 				<div className="hidden md:flex flex-col justify-between w-full md:w-1/2 p-8 bg-indigo-600 text-white">
 					<div>
 						<div className="font-extrabold text-3xl flex items-center gap-2 mb-8">
@@ -153,21 +142,14 @@ export default function LoginPage() {
 							Unlock the Power of Trust.
 						</h1>
 						<p className="text-indigo-200 leading-relaxed">
-							Sign in to access our industry-leading platform for
-							verifying and managing academic certificates with
-							confidence.
+							Use the same authentication flow across users, verifiers, company
+							admins, and institution teams.
 						</p>
 					</div>
 					<ul className="space-y-4">
-						<Feature
-							icon={ShieldCheck}
-							text="AI-Powered Tamper Detection"
-						/>
-						<Feature
-							icon={LogIn}
-							text="Streamlined Institution Workflows"
-						/>
-						<Feature icon={Mail} text="Real-Time Status Updates" />
+						<Feature icon={ShieldCheck} text="JWT-backed private sessions" />
+						<Feature icon={LogIn} text="Role-based workspace routing" />
+						<Feature icon={Mail} text="Live status updates after sign-in" />
 					</ul>
 				</div>
 			</div>
