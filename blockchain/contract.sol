@@ -71,3 +71,5 @@ contract DocumentVerification {
         return (true, doc.issuer, doc.timestamp);
     }
 }
+
+//just timepass
