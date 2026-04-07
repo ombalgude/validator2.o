@@ -72,4 +72,3 @@ contract DocumentVerification {
     }
 }
 
-//just timepass
