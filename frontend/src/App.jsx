@@ -1,84 +1,93 @@
-import React, { useEffect, useState } from "react";
-import {
-	BrowserRouter,
-	Routes,
-	Route,
-	Navigate,
-	Link,
-	useNavigate,
-} from "react-router-dom";
+import React from "react";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import "./index.css";
-import CertificatesPage from "./pages/Certificates.jsx";
-import UploadPage from "./pages/Upload.jsx";
+import { AuthProvider } from "./context/AuthContext";
+import Layout from "./components/Layout.jsx";
+import PrivateRoute from "./components/PrivateRoute.jsx";
+import PublicRoute from "./components/PublicRoute.jsx";
 import Landing from "./pages/Landing.jsx";
+import OCRPage from "./pages/OCRPage.jsx";
+import LoginPage from "./pages/LoginPage.jsx";
 import LoginInstitution from "./pages/LoginInstitution.jsx";
 import RegisterUser from "./pages/RegisterUser.jsx";
 import RegisterInstitution from "./pages/RegisterInstitution.jsx";
-import LoginPage from "./pages/LoginPage.jsx";
-import Layout from "./components/Layout.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
-import PrivateRoute from "./components/PrivateRoute.jsx";
-import OCRPage from "./pages/OCRPage.jsx";
+import CertificatesPage from "./pages/Certificates.jsx";
+import UploadPage from "./pages/Upload.jsx";
 
-export default function App() {
-	const navigate = useNavigate();
-	const onLogout = () => {
-		setToken("");
-		navigate("/login", { replace: true });
-	};
+function ProtectedPage({ children, roles }) {
+	return (
+		<PrivateRoute roles={roles}>
+			<Layout>{children}</Layout>
+		</PrivateRoute>
+	);
+}
 
+function App() {
 	return (
 		<Routes>
 			<Route path="/" element={<Landing />} />
 			<Route path="/demo" element={<OCRPage />} />
-			<Route path="/login" element={<LoginPage />} />
-			<Route path="/login-institution" element={<LoginInstitution />} />
-			<Route path="/register" element={<RegisterUser />} />
+
 			<Route
-				path="/register-institution"
-				element={<RegisterInstitution />}
-			/>
-			<Route
-				path="/"
+				path="/login"
 				element={
-					<PrivateRoute>
-						<Layout onLogout={onLogout}>
-							<Landing />
-						</Layout>
-					</PrivateRoute>
+					<PublicRoute>
+						<LoginPage />
+					</PublicRoute>
 				}
 			/>
 			<Route
+				path="/login-institution"
+				element={
+					<PublicRoute>
+						<LoginInstitution />
+					</PublicRoute>
+				}
+			/>
+			<Route
+				path="/register"
+				element={
+					<PublicRoute>
+						<RegisterUser />
+					</PublicRoute>
+				}
+			/>
+			<Route
+				path="/register-institution"
+				element={
+					<PublicRoute>
+						<RegisterInstitution />
+					</PublicRoute>
+				}
+			/>
+
+			<Route
 				path="/dashboard"
 				element={
-					<PrivateRoute>
-						<Layout onLogout={onLogout}>
-							<DashboardPage />
-						</Layout>
-					</PrivateRoute>
+					<ProtectedPage roles={["admin"]}>
+						<DashboardPage />
+					</ProtectedPage>
 				}
 			/>
 			<Route
 				path="/certificates"
 				element={
-					<PrivateRoute>
-						<Layout onLogout={onLogout}>
-							<CertificatesPage />
-						</Layout>
-					</PrivateRoute>
+					<ProtectedPage>
+						<CertificatesPage />
+					</ProtectedPage>
 				}
 			/>
 			<Route
 				path="/upload"
 				element={
-					<PrivateRoute>
-						<Layout onLogout={onLogout}>
-							<UploadPage />
-						</Layout>
-					</PrivateRoute>
+					<ProtectedPage roles={["admin", "institution_admin", "university_admin"]}>
+						<UploadPage />
+					</ProtectedPage>
 				}
 			/>
-			<Route path="*" element={<Navigate to="/dashboard" replace />} />
+
+			<Route path="*" element={<Navigate to="/" replace />} />
 		</Routes>
 	);
 }
@@ -86,7 +95,11 @@ export default function App() {
 export function Root() {
 	return (
 		<BrowserRouter>
-			<App />
+			<AuthProvider>
+				<App />
+			</AuthProvider>
 		</BrowserRouter>
 	);
 }
+
+export default App;

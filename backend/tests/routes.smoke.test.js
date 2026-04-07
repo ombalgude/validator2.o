@@ -20,6 +20,7 @@ const PRIVATE_ROUTE_CHECKS = [
   { method: 'PUT', path: `/api/users/${SAMPLE_ID}`, body: {} },
   { method: 'DELETE', path: `/api/users/${SAMPLE_ID}` },
   { method: 'POST', path: '/api/certificates/verify' },
+  { method: 'POST', path: '/api/certificates/validate', body: {} },
   { method: 'POST', path: '/api/certificates/bulk' },
   { method: 'GET', path: '/api/certificates' },
   { method: 'GET', path: `/api/certificates/${SAMPLE_CERTIFICATE_ID}` },

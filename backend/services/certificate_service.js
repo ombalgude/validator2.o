@@ -1,68 +1,138 @@
 /**
  * Certificate Service
- * Handles business logic for certificate operations
+ * Keeps certificate business rules in one place so routes stay thin.
  */
 
 const crypto = require('crypto');
 const fs = require('fs').promises;
 const Certificate = require('../models/Certificate');
+const Institution = require('../models/Institution');
 const VerificationLog = require('../models/VerificationLog');
 const AIService = require('./ai_service');
-const NotificationService = require('./notification_service');
-const { normalizeCertificateInput } = require('../utils/certificatePayload');
+const notificationService = require('./notification_instance');
+const {
+  computeCertificateHash,
+  deriveCertificateSearchFields,
+  normalizeCertificateInput,
+} = require('../utils/certificatePayload');
+const { buildInstitutionScopedFilter, canUserAccessInstitution } = require('../utils/institutionScope');
+
+const ALLOWED_UPLOAD_ROLES = new Set(['admin', 'institution_admin', 'university_admin']);
+const ALLOWED_VERIFY_ROLES = new Set(['admin', 'verifier', 'company_admin']);
+const ALLOWED_COMPARE_ROLES = new Set(['admin', 'institution_admin', 'university_admin', 'company_admin', 'verifier']);
+const VALID_STATUSES = new Set(['verified', 'suspicious', 'fake', 'pending']);
+
+const VERIFY_METHODS = {
+  AI_ANALYSIS: 'ai_analysis',
+  DATABASE_CHECK: 'database_check',
+  MANUAL_REVIEW: 'manual_review',
+  SYSTEM: 'system',
+};
+
+const normalizeCertificateId = (certificateId) => String(certificateId || '').trim().toUpperCase();
+const getIdValue = (value) => value?._id || value || null;
+
+const createServiceError = (message, statusCode = 400) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+};
+
+const buildCertificateSummary = (certificate) => ({
+  id: certificate._id,
+  certificateId: certificate.certificateId,
+  certificateHash: certificate.certificateHash,
+  status: certificate.verificationStatus,
+});
+
+const buildPaginationResult = (page, limit, total) => ({
+  page,
+  limit,
+  total,
+  pages: Math.ceil(total / limit),
+});
 
 class CertificateService {
-  constructor() {
-    this.aiService = new AIService();
-    this.notificationService = new NotificationService();
+  constructor({ aiService, notificationService: injectedNotificationService } = {}) {
+    this.aiService = aiService || new AIService();
+    this.notificationService = injectedNotificationService || notificationService;
   }
 
-  /**
-   * Upload and verify a certificate
-   * @param {Object} file - Uploaded file
-   * @param {Object} user - User performing the upload
-   * @param {Object} metadata - Additional metadata
-   * @returns {Promise<Object>} Verification result
-   */
-  async uploadAndVerify(file, user, metadata = {}) {
+  async createTrustedCertificate(file, user, input, options = {}) {
+    const { certificate } = await this.storeTrustedCertificateRecord({
+      file,
+      user,
+      input,
+      sourceType: options.sourceType || 'manual_upload',
+    });
+
+    return {
+      message: 'Certificate uploaded successfully',
+      certificate: buildCertificateSummary(certificate),
+    };
+  }
+
+  async createBulkTrustedCertificates(files, records, user) {
+    if (!Array.isArray(files) || files.length === 0) {
+      throw createServiceError('No files uploaded');
+    }
+
+    if (!Array.isArray(records) || records.length !== files.length) {
+      throw createServiceError('Bulk upload requires a records JSON array with one certificate payload per file');
+    }
+
+    const certificates = [];
+    const errors = [];
+
+    for (let index = 0; index < files.length; index += 1) {
+      try {
+        const result = await this.createTrustedCertificate(files[index], user, records[index], {
+          sourceType: 'bulk_upload',
+        });
+
+        certificates.push(result.certificate);
+      } catch (error) {
+        errors.push({
+          file: files[index].originalname,
+          error: error.message,
+        });
+      }
+    }
+
+    return {
+      message: 'Bulk upload completed',
+      uploaded: certificates.length,
+      failed: errors.length,
+      certificates,
+      errors,
+    };
+  }
+
+  async uploadAndVerify(file, user, input = {}, requestDetails = {}) {
     try {
-      const normalizedMetadata = normalizeCertificateInput(metadata);
-      normalizedMetadata.institutionId = normalizedMetadata.institutionId || user.institutionId || null;
-
-      const certificateId = normalizedMetadata.certificateId || this.generateCertificateId();
-      const fileBuffer = await this.getFileBuffer(file);
-      const documentHash = this.calculateDocumentHash(fileBuffer);
-
-      const certificate = new Certificate({
-        ...normalizedMetadata,
-        certificateId,
-        documentHash,
-        verificationStatus: 'pending',
-        uploadedBy: user._id,
-        uploadedAt: new Date(),
-        filePath: file.path || '',
-        originalFileName: file.originalname || '',
-        sourceType: metadata.sourceType || 'manual_upload',
+      const { certificate, fileBuffer } = await this.storeTrustedCertificateRecord({
+        file,
+        user,
+        input,
+        sourceType: requestDetails.sourceType || 'manual_upload',
       });
 
-      await certificate.save();
-
-      const verificationResults = await this.performAIVerification(file, certificateId);
-      certificate.verificationResults = verificationResults;
-      certificate.verificationStatus = this.determineVerificationStatus(verificationResults);
-      await certificate.save();
+      const verificationResults = await this.applyAiVerification(certificate, file, fileBuffer);
 
       await this.logVerification(certificate, user, certificate.verificationStatus, {
-        ipAddress: metadata.ipAddress,
-        userAgent: metadata.userAgent,
-        verificationMethod: 'ai_analysis',
+        ipAddress: requestDetails.ipAddress,
+        userAgent: requestDetails.userAgent,
+        verificationMethod: VERIFY_METHODS.AI_ANALYSIS,
       });
 
-      await this.notificationService.sendVerificationComplete(certificateId, certificate.verificationStatus);
+      await this.notificationService.sendVerificationComplete(certificate.certificateId, certificate.verificationStatus, {
+        uploadedBy: getIdValue(certificate.uploadedBy),
+        institutionId: getIdValue(certificate.institutionId),
+      });
 
       return {
         success: true,
-        certificateId,
+        certificateId: certificate.certificateId,
         certificateHash: certificate.certificateHash,
         verificationStatus: certificate.verificationStatus,
         verificationResults,
@@ -70,28 +140,22 @@ class CertificateService {
       };
     } catch (error) {
       console.error('Error in uploadAndVerify:', error);
-      throw new Error(`Certificate upload failed: ${error.message}`);
+      throw this.wrapUnexpectedError(error, 'Certificate upload failed');
     }
   }
 
-  /**
-   * Get certificate by ID
-   * @param {string} certificateId - Certificate ID
-   * @param {Object} user - User requesting the certificate
-   * @returns {Promise<Object>} Certificate data
-   */
   async getCertificate(certificateId, user) {
     try {
-      const certificate = await Certificate.findOne({ certificateId })
+      const certificate = await Certificate.findOne({ certificateId: normalizeCertificateId(certificateId) })
         .populate('institutionId', 'name code')
         .populate('uploadedBy', 'email role');
 
       if (!certificate) {
-        throw new Error('Certificate not found');
+        throw createServiceError('Certificate not found', 404);
       }
 
-      if (!this.canAccessCertificate(certificate, user)) {
-        throw new Error('Access denied');
+      if (!(await this.canAccessCertificate(certificate, user))) {
+        throw createServiceError('Access denied', 403);
       }
 
       return {
@@ -100,27 +164,23 @@ class CertificateService {
       };
     } catch (error) {
       console.error('Error in getCertificate:', error);
-      throw new Error(`Failed to retrieve certificate: ${error.message}`);
+      throw this.wrapUnexpectedError(error, 'Failed to retrieve certificate');
     }
   }
 
-  /**
-   * Get all certificates with filtering and pagination
-   * @param {Object} filters - Filter criteria
-   * @param {Object} user - User requesting certificates
-   * @param {Object} pagination - Pagination options
-   * @returns {Promise<Object>} Paginated certificate list
-   */
   async getCertificates(filters = {}, user, pagination = {}) {
     try {
-      const { page = 1, limit = 10, sortBy = 'uploadedAt', sortOrder = 'desc' } = pagination;
+      const page = pagination.page || 1;
+      const limit = pagination.limit || 10;
+      const sortBy = pagination.sortBy || 'uploadedAt';
+      const sortOrder = pagination.sortOrder === 'asc' ? 1 : -1;
       const skip = (page - 1) * limit;
-      const query = this.buildCertificateQuery(filters, user);
+      const query = await this.buildCertificateQuery(filters, user);
 
       const certificates = await Certificate.find(query)
         .populate('institutionId', 'name code')
         .populate('uploadedBy', 'email role')
-        .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
+        .sort({ [sortBy]: sortOrder })
         .skip(skip)
         .limit(limit);
 
@@ -129,112 +189,116 @@ class CertificateService {
       return {
         success: true,
         certificates: certificates.map((certificate) => this.formatCertificateForResponse(certificate)),
-        pagination: {
-          page,
-          limit,
-          total,
-          pages: Math.ceil(total / limit),
-        },
+        pagination: buildPaginationResult(page, limit, total),
       };
     } catch (error) {
       console.error('Error in getCertificates:', error);
-      throw new Error(`Failed to retrieve certificates: ${error.message}`);
+      throw this.wrapUnexpectedError(error, 'Failed to retrieve certificates');
     }
   }
 
-  /**
-   * Update certificate verification status
-   * @param {string} certificateId - Certificate ID
-   * @param {string} status - New verification status
-   * @param {Object} user - User updating the status
-   * @param {string} reason - Reason for status change
-   * @returns {Promise<Object>} Update result
-   */
-  async updateVerificationStatus(certificateId, status, user, reason = '') {
+  async updateVerificationStatus(identifier, update, user, requestDetails = {}) {
     try {
-      const certificate = await Certificate.findOne({ certificateId });
+      this.ensureRole(ALLOWED_VERIFY_ROLES, user, 'Access denied', 403);
 
+      const normalizedStatus = String(update.status || '').trim();
+      if (!VALID_STATUSES.has(normalizedStatus)) {
+        throw createServiceError('Invalid verification status');
+      }
+
+      const certificate = await this.findCertificateByIdentifier(identifier);
       if (!certificate) {
-        throw new Error('Certificate not found');
+        throw createServiceError('Certificate not found', 404);
       }
 
-      if (!['verified', 'suspicious', 'fake', 'pending'].includes(status)) {
-        throw new Error('Invalid verification status');
+      if (!(await this.canAccessCertificate(certificate, user))) {
+        throw createServiceError('Access denied', 403);
       }
 
-      certificate.verificationStatus = status;
+      certificate.verificationStatus = normalizedStatus;
+      if (update.verificationResults) {
+        certificate.verificationResults = {
+          ...certificate.verificationResults,
+          ...update.verificationResults,
+        };
+      }
+
       await certificate.save();
 
-      await this.logVerification(certificate, user, status, {
-        verificationMethod: 'manual_review',
-        reason,
-        details: `Status changed to ${status} by ${user.email}`,
+      await this.logVerification(certificate, user, normalizedStatus, {
+        ipAddress: requestDetails.ipAddress,
+        userAgent: requestDetails.userAgent,
+        verificationMethod: update.verificationMethod || VERIFY_METHODS.MANUAL_REVIEW,
+        ...(update.reason ? { reason: String(update.reason).trim() } : {}),
+        ...(update.verificationResults || {}),
       });
 
-      await this.notificationService.sendStatusUpdate(certificateId, status);
+      await this.notificationService.sendStatusUpdate(certificate.certificateId, normalizedStatus, {
+        uploadedBy: getIdValue(certificate.uploadedBy),
+        institutionId: getIdValue(certificate.institutionId),
+      });
 
       return {
-        success: true,
-        message: 'Verification status updated successfully',
-        certificateId,
-        newStatus: status,
+        message: 'Certificate verification updated',
+        certificate: this.formatCertificateForResponse(certificate),
       };
     } catch (error) {
       console.error('Error in updateVerificationStatus:', error);
-      throw new Error(`Failed to update verification status: ${error.message}`);
+      throw this.wrapUnexpectedError(error, 'Failed to update verification status');
     }
   }
 
-  /**
-   * Perform bulk certificate upload
-   * @param {Array} files - Array of uploaded files
-   * @param {Object} user - User performing the upload
-   * @param {Object} metadata - Additional metadata
-   * @returns {Promise<Object>} Bulk upload result
-   */
-  async bulkUpload(files, user, metadata = {}) {
+  async compareCandidateCertificate(input, user, file = null, requestDetails = {}) {
     try {
-      const results = [];
-      const errors = [];
-      const records = Array.isArray(metadata.records) ? metadata.records : [];
+      this.ensureRole(ALLOWED_COMPARE_ROLES, user, 'Access denied', 403);
 
-      for (let index = 0; index < files.length; index += 1) {
-        try {
-          const result = await this.uploadAndVerify(files[index], user, {
-            ...(records[index] || {}),
-            ipAddress: metadata.ipAddress,
-            userAgent: metadata.userAgent,
-            sourceType: 'bulk_upload',
-          });
-          results.push(result);
-        } catch (error) {
-          errors.push({
-            fileName: files[index].originalname,
-            error: error.message,
-          });
-        }
+      const candidate = await this.buildCandidateSnapshot(input, file);
+      const trustedMatch = await this.findTrustedCertificateMatch(candidate);
+
+      if (trustedMatch.certificate && !(await this.canAccessCertificate(trustedMatch.certificate, user))) {
+        throw createServiceError('Access denied', 403);
+      }
+
+      const comparison = this.evaluateCandidateMatch(candidate, trustedMatch);
+
+      if (trustedMatch.certificate) {
+        await this.logVerification(trustedMatch.certificate, user, comparison.verificationStatus, {
+          ipAddress: requestDetails.ipAddress,
+          userAgent: requestDetails.userAgent,
+          verificationMethod: VERIFY_METHODS.DATABASE_CHECK,
+          databaseMatch: comparison.isMatch,
+          candidateCertificateHash: candidate.certificateHash,
+          candidateDocumentHash: candidate.documentHash,
+          matchType: comparison.matchType,
+        });
       }
 
       return {
         success: true,
-        processed: results.length,
-        errors: errors.length,
-        results,
-        errors,
+        isMatch: comparison.isMatch,
+        verificationStatus: comparison.verificationStatus,
+        matchType: comparison.matchType,
+        message: comparison.message,
+        candidateCertificate: {
+          certificateId: candidate.certificateId,
+          certificateHash: candidate.certificateHash,
+          documentHash: candidate.documentHash,
+          studentName: candidate.searchFields.studentName,
+          rollNumber: candidate.searchFields.rollNumber,
+          course: candidate.searchFields.course,
+          issueDate: candidate.searchFields.issueDate,
+        },
+        trustedCertificate: trustedMatch.certificate
+          ? this.formatCertificateForResponse(trustedMatch.certificate)
+          : null,
       };
     } catch (error) {
-      console.error('Error in bulkUpload:', error);
-      throw new Error(`Bulk upload failed: ${error.message}`);
+      console.error('Error in compareCandidateCertificate:', error);
+      throw this.wrapUnexpectedError(error, 'Candidate certificate comparison failed');
     }
   }
 
-  /**
-   * Perform AI verification on certificate
-   * @param {Object} file - Uploaded file
-   * @param {string} certificateId - Certificate ID
-   * @returns {Promise<Object>} AI verification results
-   */
-  async performAIVerification(file, certificateId) {
+  async performAIVerification(file) {
     try {
       const results = {
         ocrConfidence: 0,
@@ -258,7 +322,7 @@ class CertificateService {
 
         const templateResult = await this.aiService.matchTemplate(file);
         results.templateMatch = templateResult.match_score || 0;
-        results.templateId = templateResult.template_id || null;
+        results.templateId = templateResult.template_id || '';
 
         const anomalyResult = await this.aiService.detectAnomalies(file);
         results.anomalyScore = anomalyResult.anomaly_score || 0;
@@ -283,30 +347,16 @@ class CertificateService {
     }
   }
 
-  /**
-   * Generate unique certificate ID
-   * @returns {string} Unique certificate ID
-   */
   generateCertificateId() {
     const timestamp = Date.now().toString(36);
     const random = Math.random().toString(36).slice(2, 7);
     return `CERT_${timestamp}_${random}`.toUpperCase();
   }
 
-  /**
-   * Calculate document hash
-   * @param {Buffer} buffer - File buffer
-   * @returns {string} SHA-256 hash
-   */
   calculateDocumentHash(buffer) {
     return crypto.createHash('sha256').update(buffer).digest('hex');
   }
 
-  /**
-   * Determine verification status based on AI results
-   * @param {Object} results - AI verification results
-   * @returns {string} Verification status
-   */
   determineVerificationStatus(results) {
     const {
       ocrConfidence = 0,
@@ -330,44 +380,27 @@ class CertificateService {
     return 'pending';
   }
 
-  /**
-   * Check if user can access certificate
-   * @param {Object} certificate - Certificate object
-   * @param {Object} user - User object
-   * @returns {boolean} Can access
-   */
-  canAccessCertificate(certificate, user) {
-    if (user.role === 'admin' || user.role === 'verifier' || user.role === 'company_admin') {
+  canUploadToInstitution(user, institutionId) {
+    if (user.role === 'admin') {
       return true;
     }
 
-    if (
-      (user.role === 'institution_admin' || user.role === 'university_admin') &&
-      user.institutionId &&
-      certificate.institutionId &&
-      user.institutionId.toString() === certificate.institutionId._id.toString()
-    ) {
-      return true;
+    if (user.role === 'institution_admin' || user.role === 'university_admin') {
+      return String(user.institutionId || '') === String(institutionId || '');
     }
 
     return false;
   }
 
-  /**
-   * Build query for certificate filtering
-   * @param {Object} filters - Filter criteria
-   * @param {Object} user - User making the request
-   * @returns {Object} MongoDB query
-   */
-  buildCertificateQuery(filters, user) {
+  async canAccessCertificate(certificate, user) {
+    return canUserAccessInstitution(user, getIdValue(certificate.institutionId));
+  }
+
+  async buildCertificateQuery(filters, user) {
     const query = {};
 
-    if ((user.role === 'institution_admin' || user.role === 'university_admin') && user.institutionId) {
-      query.institutionId = user.institutionId;
-    }
-
-    if (filters.verificationStatus) {
-      query.verificationStatus = filters.verificationStatus;
+    if (filters.status || filters.verificationStatus) {
+      query.verificationStatus = filters.status || filters.verificationStatus;
     }
 
     if (filters.institutionId) {
@@ -382,28 +415,29 @@ class CertificateService {
       query.rollNumber = { $regex: filters.rollNumber, $options: 'i' };
     }
 
+    if (filters.certificateId) {
+      query.certificateId = normalizeCertificateId(filters.certificateId);
+    }
+
     if (filters.certificateHash) {
       query.certificateHash = String(filters.certificateHash).trim().toLowerCase();
     }
 
     if (filters.dateFrom || filters.dateTo) {
       query.uploadedAt = {};
+
       if (filters.dateFrom) {
         query.uploadedAt.$gte = new Date(filters.dateFrom);
       }
+
       if (filters.dateTo) {
         query.uploadedAt.$lte = new Date(filters.dateTo);
       }
     }
 
-    return query;
+    return buildInstitutionScopedFilter(query, user);
   }
 
-  /**
-   * Format certificate for API response
-   * @param {Object} certificate - Certificate object
-   * @returns {Object} Formatted certificate
-   */
   formatCertificateForResponse(certificate) {
     return {
       id: certificate._id,
@@ -421,18 +455,18 @@ class CertificateService {
       issueDate: certificate.issueDate,
       institution: certificate.institutionId
         ? {
-            id: certificate.institutionId._id,
-            name: certificate.institutionId.name,
-            code: certificate.institutionId.code,
+            id: getIdValue(certificate.institutionId),
+            name: certificate.institutionId.name || '',
+            code: certificate.institutionId.code || '',
           }
         : null,
       verificationStatus: certificate.verificationStatus,
       verificationResults: certificate.verificationResults,
       uploadedBy: certificate.uploadedBy
         ? {
-            id: certificate.uploadedBy._id,
-            email: certificate.uploadedBy.email,
-            role: certificate.uploadedBy.role,
+            id: getIdValue(certificate.uploadedBy),
+            email: certificate.uploadedBy.email || '',
+            role: certificate.uploadedBy.role || '',
           }
         : null,
       uploadedAt: certificate.uploadedAt,
@@ -440,25 +474,170 @@ class CertificateService {
     };
   }
 
-  /**
-   * Log verification activity
-   * @param {Object} certificate - Certificate document
-   * @param {Object} user - Acting user
-   * @param {string} result - Verification result
-   * @param {Object} details - Additional details
-   * @returns {Promise<void>}
-   */
+  async storeTrustedCertificateRecord({ file, user, input, sourceType }) {
+    const normalizedInput = this.prepareTrustedCertificateInput(input, user);
+
+    this.ensureRole(ALLOWED_UPLOAD_ROLES, user, 'Access denied', 403);
+
+    if (!normalizedInput.institutionId) {
+      throw createServiceError('Institution ID is required');
+    }
+
+    if (!this.canUploadToInstitution(user, normalizedInput.institutionId)) {
+      throw createServiceError('Access denied', 403);
+    }
+
+    await this.ensureInstitutionExists(normalizedInput.institutionId);
+
+    const fileBuffer = await this.getFileBuffer(file);
+    const certificate = new Certificate({
+      ...normalizedInput,
+      certificateId: normalizeCertificateId(normalizedInput.certificateId) || this.generateCertificateId(),
+      documentHash: this.calculateDocumentHash(fileBuffer),
+      uploadedBy: getIdValue(user._id || user.id),
+      uploadedAt: new Date(),
+      filePath: file.path || '',
+      originalFileName: file.originalname || '',
+      sourceType,
+      verificationStatus: 'pending',
+    });
+
+    await certificate.save();
+    await Institution.findByIdAndUpdate(certificate.institutionId, { $inc: { totalCertificates: 1 } });
+
+    return { certificate, fileBuffer };
+  }
+
+  async applyAiVerification(certificate, file, fileBuffer) {
+    const aiCompatibleFile = file?.buffer ? file : { ...file, buffer: fileBuffer };
+    const verificationResults = await this.performAIVerification(aiCompatibleFile);
+
+    certificate.verificationResults = verificationResults;
+    certificate.verificationStatus = this.determineVerificationStatus(verificationResults);
+    await certificate.save();
+
+    return verificationResults;
+  }
+
+  async buildCandidateSnapshot(input, file) {
+    const normalizedCandidate = normalizeCertificateInput(input);
+    const fileBuffer = file ? await this.getFileBuffer(file) : null;
+
+    return {
+      normalizedInput: normalizedCandidate,
+      certificateId: normalizeCertificateId(normalizedCandidate.certificateId),
+      certificateHash: computeCertificateHash(normalizedCandidate),
+      documentHash: fileBuffer ? this.calculateDocumentHash(fileBuffer) : null,
+      searchFields: deriveCertificateSearchFields(normalizedCandidate),
+    };
+  }
+
+  async findTrustedCertificateMatch(candidate) {
+    const hashMatch = await Certificate.findOne({ certificateHash: candidate.certificateHash });
+    if (hashMatch) {
+      return {
+        certificate: hashMatch,
+        matchType: 'certificate_hash',
+      };
+    }
+
+    const certificateIdMatch = await Certificate.findOne({ certificateId: candidate.certificateId });
+    if (certificateIdMatch) {
+      return {
+        certificate: certificateIdMatch,
+        matchType: 'certificate_id',
+      };
+    }
+
+    return {
+      certificate: null,
+      matchType: null,
+    };
+  }
+
+  evaluateCandidateMatch(candidate, trustedMatch) {
+    if (!trustedMatch.certificate) {
+      return {
+        isMatch: false,
+        verificationStatus: 'suspicious',
+        matchType: null,
+        message: 'No trusted university certificate record was found for this document',
+      };
+    }
+
+    if (trustedMatch.certificate.certificateHash === candidate.certificateHash) {
+      return {
+        isMatch: true,
+        verificationStatus: 'verified',
+        matchType: 'certificate_hash',
+        message: 'Certificate matches the trusted university record',
+      };
+    }
+
+    return {
+      isMatch: false,
+      verificationStatus: 'fake',
+      matchType: trustedMatch.matchType,
+      message: 'Certificate ID exists, but the uploaded certificate data does not match the trusted university record',
+    };
+  }
+
+  prepareTrustedCertificateInput(input, user) {
+    const normalizedInput = normalizeCertificateInput(input);
+    normalizedInput.institutionId = normalizedInput.institutionId || String(user.institutionId || '').trim() || null;
+    return normalizedInput;
+  }
+
+  async ensureInstitutionExists(institutionId) {
+    const institution = await Institution.findById(institutionId).select('_id');
+    if (!institution) {
+      throw createServiceError('Institution not found', 404);
+    }
+  }
+
+  async findCertificateByIdentifier(identifier) {
+    const trimmedIdentifier = String(identifier || '').trim();
+
+    if (!trimmedIdentifier) {
+      return null;
+    }
+
+    if (/^[a-f\d]{24}$/i.test(trimmedIdentifier)) {
+      return Certificate.findOne({ _id: trimmedIdentifier });
+    }
+
+    return Certificate.findOne({ certificateId: normalizeCertificateId(trimmedIdentifier) });
+  }
+
+  ensureRole(allowedRoles, user, message, statusCode = 400) {
+    if (!allowedRoles.has(user.role)) {
+      throw createServiceError(message, statusCode);
+    }
+  }
+
+  wrapUnexpectedError(error, fallbackPrefix) {
+    if (error?.statusCode) {
+      return error;
+    }
+
+    if (error?.code === 11000) {
+      return createServiceError('Certificate ID or certificate hash already exists');
+    }
+
+    return createServiceError(`${fallbackPrefix}: ${error.message}`, 500);
+  }
+
   async logVerification(certificate, user, result, details = {}) {
     try {
       const log = new VerificationLog({
-        certificateId: certificate._id,
-        verifiedBy: user._id,
-        institutionId: certificate.institutionId,
+        certificateId: getIdValue(certificate._id),
+        verifiedBy: getIdValue(user._id || user.id),
+        institutionId: getIdValue(certificate.institutionId),
         timestamp: new Date(),
         result,
         ipAddress: details.ipAddress || '',
         userAgent: details.userAgent || '',
-        verificationMethod: details.verificationMethod || 'system',
+        verificationMethod: details.verificationMethod || VERIFY_METHODS.SYSTEM,
         certificateHash: certificate.certificateHash,
         verifierRole: user.role || '',
         details,
@@ -479,7 +658,7 @@ class CertificateService {
       return fs.readFile(file.path);
     }
 
-    throw new Error('Uploaded file is missing a readable buffer or path');
+    throw createServiceError('Uploaded file is missing a readable buffer or path');
   }
 }
 

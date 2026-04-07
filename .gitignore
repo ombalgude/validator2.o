@@ -243,3 +243,5 @@ echo "*.md"
 *.mp4
 
 frontend/src/assets/media/video/*.mp4
+!frontend/src/lib/
+!frontend/src/lib/**

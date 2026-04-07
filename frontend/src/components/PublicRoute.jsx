@@ -3,7 +3,7 @@ import { Navigate } from "react-router-dom";
 import useAuth from "../hooks/useAuth";
 import { getDefaultRouteForRole } from "../lib/roles";
 
-export default function PrivateRoute({ children, roles = [] }) {
+export default function PublicRoute({ children }) {
 	const { isAuthenticated, isBootstrapping, user } = useAuth();
 
 	if (isBootstrapping) {
@@ -14,12 +14,13 @@ export default function PrivateRoute({ children, roles = [] }) {
 		);
 	}
 
-	if (!isAuthenticated) {
-		return <Navigate to="/login" replace />;
-	}
-
-	if (roles.length > 0 && !roles.includes(user?.role)) {
-		return <Navigate to={getDefaultRouteForRole(user?.role)} replace />;
+	if (isAuthenticated) {
+		return (
+			<Navigate
+				to={getDefaultRouteForRole(user?.role)}
+				replace
+			/>
+		);
 	}
 
 	return children;

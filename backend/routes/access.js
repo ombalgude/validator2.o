@@ -7,6 +7,7 @@ const UniversityAdmin = require('../models/univercity_admin');
 const CompanyAdmin = require('../models/company_admin');
 const Verifier = require('../models/Verifier');
 const { auth, authorize } = require('../middleware/auth');
+const { applyUserAccessProfile, clearUserAccessState } = require('../utils/userAccessProfile');
 
 const router = express.Router();
 
@@ -352,7 +353,7 @@ router.post('/:type', auth, authorize('admin'), async (req, res) => {
     const profile = new config.model(payload);
     await profile.save();
 
-    config.syncUser(user, profile);
+    applyUserAccessProfile(user, config, profile);
     await user.save();
 
     let createdProfile = config.model.findById(profile._id);
@@ -419,7 +420,7 @@ router.put('/:type/:id', auth, authorize('admin'), async (req, res) => {
 
     const user = await User.findById(profile.userId);
     if (user) {
-      config.syncUser(user, profile);
+      applyUserAccessProfile(user, config, profile);
       await user.save();
     }
 
@@ -449,6 +450,12 @@ router.delete('/:type/:id', auth, authorize('admin'), async (req, res) => {
     const profile = await config.model.findByIdAndDelete(req.params.id);
     if (!profile) {
       return res.status(404).json({ message: `${config.label} profile not found` });
+    }
+
+    const user = await User.findById(profile.userId);
+    if (user && user.role === config.role) {
+      clearUserAccessState(user);
+      await user.save();
     }
 
     res.json({ message: `${config.label} profile deleted successfully` });

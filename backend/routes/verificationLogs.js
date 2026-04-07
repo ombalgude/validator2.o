@@ -1,12 +1,13 @@
 const express = require('express');
 const VerificationLog = require('../models/VerificationLog');
 const { auth, authorize } = require('../middleware/auth');
+const { buildInstitutionScopedFilter, canUserAccessInstitution } = require('../utils/institutionScope');
 
 const router = express.Router();
 
 const parseLimit = (value) => Math.min(parseInt(value, 10) || 10, 100);
 
-const buildLogFilter = (query, user) => {
+const buildLogFilter = async (query, user) => {
   const filter = {};
 
   if (query.certificateId) {
@@ -29,34 +30,16 @@ const buildLogFilter = (query, user) => {
     filter.verificationMethod = query.verificationMethod;
   }
 
-  if (user.role === 'institution_admin' || user.role === 'university_admin') {
-    filter.institutionId = user.institutionId;
-  }
-
-  return filter;
+  return buildInstitutionScopedFilter(filter, user);
 };
 
-const canAccessLog = (log, user) => {
-  if (user.role === 'admin' || user.role === 'verifier' || user.role === 'company_admin') {
-    return true;
-  }
-
-  if (
-    (user.role === 'institution_admin' || user.role === 'university_admin') &&
-    log.institutionId &&
-    String(log.institutionId._id || log.institutionId) === String(user.institutionId)
-  ) {
-    return true;
-  }
-
-  return false;
-};
+const canAccessLog = (log, user) => canUserAccessInstitution(user, log.institutionId?._id || log.institutionId);
 
 router.get('/', auth, authorize('admin', 'verifier', 'company_admin', 'institution_admin', 'university_admin'), async (req, res) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseLimit(req.query.limit);
-    const filter = buildLogFilter(req.query, req.user);
+    const filter = await buildLogFilter(req.query, req.user);
 
     const logs = await VerificationLog.find(filter)
       .populate('certificateId', 'certificateId studentName verificationStatus certificateHash')
@@ -91,7 +74,7 @@ router.get('/:id', auth, authorize('admin', 'verifier', 'company_admin', 'instit
       return res.status(404).json({ message: 'Verification log not found' });
     }
 
-    if (!canAccessLog(log, req.user)) {
+    if (!(await canAccessLog(log, req.user))) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
