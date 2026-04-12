@@ -273,9 +273,9 @@ export default function UploadPage() {
 						<h1 className="text-xl font-semibold">Trusted Certificate Uploads</h1>
 						<p className="mt-1 text-sm">
 							The backend route is named `/certificates/verify`, but in this UI it
-							is treated as a trusted record upload. Newly created records are
-							stored with a `pending` status and do not run the candidate
-							validation flow.
+							is treated as a trusted record upload. Newly created records now run
+							AI verification during upload, while candidate matching still uses
+							the separate `/certificates/validate` flow.
 						</p>
 					</div>
 				</div>
@@ -332,7 +332,8 @@ export default function UploadPage() {
 								Single Trusted Upload
 							</h2>
 							<p className="text-sm text-slate-500">
-								Create one trusted certificate record with `POST /certificates/verify`.
+								Create one trusted certificate record with `POST /certificates/verify`
+								and run the AI verification pipeline immediately.
 							</p>
 						</div>
 					</div>
@@ -409,7 +410,8 @@ export default function UploadPage() {
 							</h2>
 							<p className="text-sm text-slate-500">
 								Send one `records` JSON array and matching `certificates` files in
-								order to `POST /certificates/bulk`.
+								order to `POST /certificates/bulk`. Each file is stored as a trusted
+								record and passed through AI verification.
 							</p>
 						</div>
 						<button

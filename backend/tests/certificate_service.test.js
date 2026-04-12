@@ -12,6 +12,24 @@ const originalVerifierFindOne = Verifier.findOne;
 
 const createService = () => new CertificateService({
   aiService: {
+    completeVerification: async () => ({
+      success: true,
+      verification_status: 'verified',
+      confidence_score: 92,
+      ocr_results: { confidence: 90, text: 'sample text' },
+      tampering_results: { confidence_score: 5, tampering_detected: false },
+      template_results: { match_score: 91, template_id: 'template-1' },
+      anomaly_results: { anomaly_score: 4, anomalies: [] },
+      recommendations: [],
+      processing_time: 25,
+      orchestration_results: {
+        validation_results: {
+          overall_status: 'Passed',
+        },
+        integration_requirements: [],
+        ledger_update: [],
+      },
+    }),
     extractText: async () => ({ confidence: 90, text: 'sample text' }),
     detectTampering: async () => ({ tampering_score: 5, tampering_detected: false }),
     matchTemplate: async () => ({ match_score: 91, template_id: 'template-1' }),
@@ -64,6 +82,22 @@ const SAMPLE_CERTIFICATE_INPUT = {
 };
 
 describe('CertificateService', () => {
+  test('performAIVerification prefers the complete verification payload when available', async () => {
+    const service = createService();
+
+    const result = await service.performAIVerification({
+      originalname: 'certificate.png',
+      mimetype: 'image/png',
+      buffer: Buffer.from('sample'),
+    });
+
+    assert.equal(result.ocrConfidence, 90);
+    assert.equal(result.tamperScore, 5);
+    assert.equal(result.templateMatch, 91);
+    assert.equal(result.anomalyScore, 4);
+    assert.equal(result.orchestrator.validation_results.overall_status, 'Passed');
+  });
+
   test('buildCertificateQuery keeps company admins within their scoped institutions', async () => {
     CompanyAdmin.findOne = () => ({
       lean: async () => ({

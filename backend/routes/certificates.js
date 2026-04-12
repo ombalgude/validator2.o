@@ -106,7 +106,12 @@ router.post(
   validateCertificate,
   async (req, res) => {
     try {
-      const result = await certificateService.createTrustedCertificate(req.file, req.user, req.body);
+      const result = await certificateService.uploadAndVerify(
+        req.file,
+        req.user,
+        req.body,
+        buildRequestDetails(req)
+      );
       res.status(201).json(result);
     } catch (error) {
       console.error('Certificate upload error:', error);
