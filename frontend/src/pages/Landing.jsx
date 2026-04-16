@@ -1,7 +1,8 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import Button from "../components/Button"; // Assuming your Button component is styled well
-import {
+import
+{
 	ShieldCheck,
 	CloudUpload,
 	ScrollText,
@@ -12,7 +13,8 @@ import {
 	BellRing,
 } from "lucide-react"; // Lucide icons
 
-export default function Landing() {
+export default function Landing()
+{
 	return (
 		<div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 font-product-sans antialiased text-gray-800">
 			{/* Header */}
@@ -98,11 +100,16 @@ export default function Landing() {
 					<div className="relative p-8 bg-white rounded-3xl shadow-xl border border-gray-100 transform rotate-3 hover:rotate-0 transition-transform duration-500 ease-in-out animate-fade-in-right">
 						{/* You can replace this with an actual product screenshot for better impact */}
 						<div className="relative w-full h-72 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-2xl flex items-center justify-center mb-6 overflow-hidden">
-							<img
-								src="https://via.placeholder.com/400x300/6366f1/ffffff?text=Product+Dashboard"
-								alt="Product Dashboard"
-								className="object-cover w-full h-full transform scale-105 transition-transform duration-500 ease-in-out hover:scale-100"
-							/>
+							<iframe
+								width="100%"
+								height="100%"
+								src="https://www.youtube.com/embed/6J57p__akaA?si=WNlAPlZDwLxUAhu6&autoplay=1&mute=1&controls=0"
+								title="YouTube video player"
+								frameborder="0"
+								allow="autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+								referrerpolicy="strict-origin-when-cross-origin"
+								allowfullscreen>
+							</iframe>
 							<div className="absolute top-4 right-4 text-sm text-gray-500 bg-white bg-opacity-70 px-3 py-1 rounded-full backdrop-blur-sm">
 								Live Demo
 							</div>

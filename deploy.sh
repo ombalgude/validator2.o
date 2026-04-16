@@ -34,6 +34,23 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+COMPOSE_CMD=()
+
+setup_compose_command() {
+    if docker compose version >/dev/null 2>&1; then
+        COMPOSE_CMD=(docker compose)
+        return
+    fi
+
+    if command_exists docker-compose; then
+        COMPOSE_CMD=(docker-compose)
+        return
+    fi
+
+    print_error "Docker Compose is not installed. Please install Docker Compose first."
+    exit 1
+}
+
 # Function to check prerequisites
 check_prerequisites() {
     print_status "Checking prerequisites..."
@@ -42,11 +59,8 @@ check_prerequisites() {
         print_error "Docker is not installed. Please install Docker first."
         exit 1
     fi
-    
-    if ! command_exists docker-compose; then
-        print_error "Docker Compose is not installed. Please install Docker Compose first."
-        exit 1
-    fi
+
+    setup_compose_command
     
     print_success "All prerequisites are met."
 }
@@ -55,11 +69,31 @@ check_prerequisites() {
 create_directories() {
     print_status "Creating necessary directories..."
     
-    mkdir -p nginx/ssl
     mkdir -p scripts
     mkdir -p logs
     
     print_success "Directories created."
+}
+
+verify_required_files() {
+    print_status "Checking deployment files..."
+
+    required_files=(
+        "docker-compose.yml"
+        "frontend/Dockerfile"
+        "frontend/env.local.example"
+        "scripts/mongo-init.js"
+        "nginx/nginx.conf"
+    )
+
+    for file in "${required_files[@]}"; do
+        if [ ! -f "$file" ]; then
+            print_error "Missing required deployment file: $file"
+            exit 1
+        fi
+    done
+
+    print_success "Deployment files are present."
 }
 
 # Function to create environment files
@@ -81,127 +115,15 @@ create_env_files() {
     print_success "Environment files created."
 }
 
-# Function to create MongoDB initialization script
-create_mongo_init() {
-    print_status "Creating MongoDB initialization script..."
-    
-    cat > scripts/mongo-init.js << 'EOF'
-// MongoDB initialization script
-db = db.getSiblingDB('authenticity-validator');
-
-// Create collections with validation
-db.createCollection('users', {
-  validator: {
-    $jsonSchema: {
-      bsonType: 'object',
-      required: ['email', 'password', 'role'],
-      properties: {
-        email: { bsonType: 'string' },
-        password: { bsonType: 'string' },
-        role: { enum: ['admin', 'institution', 'verifier'] }
-      }
-    }
-  }
-});
-
-db.createCollection('certificates');
-db.createCollection('institutions');
-db.createCollection('verification_logs');
-
-// Create indexes for better performance
-db.users.createIndex({ email: 1 }, { unique: true });
-db.certificates.createIndex({ certificateId: 1 }, { unique: true });
-db.certificates.createIndex({ verificationStatus: 1 });
-db.institutions.createIndex({ code: 1 }, { unique: true });
-db.verification_logs.createIndex({ certificateId: 1 });
-db.verification_logs.createIndex({ timestamp: -1 });
-
-print('Database initialized successfully');
-EOF
-
-    print_success "MongoDB initialization script created."
-}
-
-# Function to create Nginx configuration
-create_nginx_config() {
-    print_status "Creating Nginx configuration..."
-    
-    cat > nginx/nginx.conf << 'EOF'
-events {
-    worker_connections 1024;
-}
-
-http {
-    upstream frontend {
-        server frontend:3000;
-    }
-    
-    upstream backend {
-        server backend:5000;
-    }
-    
-    upstream ai-services {
-        server ai-services:8000;
-    }
-    
-    server {
-        listen 80;
-        server_name localhost;
-        
-        # Frontend
-        location / {
-            proxy_pass http://frontend;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-        }
-        
-        # Backend API
-        location /api/ {
-            proxy_pass http://backend;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-        }
-        
-        # AI Services
-        location /ai/ {
-            proxy_pass http://ai-services;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-        }
-        
-        # WebSocket support
-        location /socket.io/ {
-            proxy_pass http://backend;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-        }
-    }
-}
-EOF
-
-    print_success "Nginx configuration created."
-}
-
 # Function to build and start services
 deploy_services() {
     print_status "Building and starting services..."
     
     # Build images
-    docker-compose build
+    "${COMPOSE_CMD[@]}" build
     
     # Start services
-    docker-compose up -d
+    "${COMPOSE_CMD[@]}" up -d
     
     print_success "Services started successfully."
 }
@@ -214,7 +136,7 @@ check_health() {
     sleep 30
     
     # Check MongoDB
-    if docker-compose exec -T mongodb mongosh --eval "db.runCommand('ping')" > /dev/null 2>&1; then
+    if "${COMPOSE_CMD[@]}" exec -T mongodb mongosh --eval "db.runCommand('ping')" > /dev/null 2>&1; then
         print_success "MongoDB is healthy"
     else
         print_error "MongoDB is not responding"
@@ -228,7 +150,7 @@ check_health() {
     fi
     
     # Check AI Services
-    if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+    if curl -f http://localhost:8001/health > /dev/null 2>&1; then
         print_success "AI Services are healthy"
     else
         print_warning "AI Services are not responding (may still be starting)"
@@ -247,22 +169,23 @@ show_urls() {
     print_success "Deployment completed! Services are available at:"
     echo ""
     echo "🌐 Frontend: http://localhost:3000"
+    echo "🌐 Reverse Proxy: http://localhost"
     echo "🔧 Backend API: http://localhost:5000"
-    echo "🤖 AI Services: http://localhost:8000"
+    echo "🤖 AI Services: http://localhost:8001"
     echo "🗄️  MongoDB: localhost:27017"
     echo "📊 Redis: localhost:6379"
     echo ""
     echo "📋 Useful commands:"
-    echo "  View logs: docker-compose logs -f"
-    echo "  Stop services: docker-compose down"
-    echo "  Restart services: docker-compose restart"
-    echo "  View service status: docker-compose ps"
+    echo "  View logs: ${COMPOSE_CMD[*]} logs -f"
+    echo "  Stop services: ${COMPOSE_CMD[*]} down"
+    echo "  Restart services: ${COMPOSE_CMD[*]} restart"
+    echo "  View service status: ${COMPOSE_CMD[*]} ps"
 }
 
 # Function to clean up
 cleanup() {
     print_status "Cleaning up..."
-    docker-compose down -v
+    "${COMPOSE_CMD[@]}" down -v
     print_success "Cleanup completed."
 }
 
@@ -276,27 +199,30 @@ main() {
         "deploy")
             check_prerequisites
             create_directories
+            verify_required_files
             create_env_files
-            create_mongo_init
-            create_nginx_config
             deploy_services
             check_health
             show_urls
             ;;
         "cleanup")
+            check_prerequisites
             cleanup
             ;;
         "restart")
+            check_prerequisites
             print_status "Restarting services..."
-            docker-compose restart
+            "${COMPOSE_CMD[@]}" restart
             check_health
             show_urls
             ;;
         "logs")
-            docker-compose logs -f
+            check_prerequisites
+            "${COMPOSE_CMD[@]}" logs -f
             ;;
         "status")
-            docker-compose ps
+            check_prerequisites
+            "${COMPOSE_CMD[@]}" ps
             ;;
         *)
             echo "Usage: $0 {deploy|cleanup|restart|logs|status}"

@@ -17,6 +17,15 @@ const dashboardRoutes = require('./routes/dashboard');
 const verificationLogRoutes = require('./routes/verificationLogs');
 const accessRoutes = require('./routes/access');
 
+const getAllowedOrigins = () => {
+  const fallbackOrigin = 'http://localhost:3000';
+
+  return String(process.env.FRONTEND_URL || fallbackOrigin)
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+};
+
 const createUnavailableFeatureRouter = (message) => {
   const router = express.Router();
 
@@ -48,11 +57,18 @@ const verifyRoutes = loadOptionalRoute(
 
 const createApp = () => {
   const app = express();
-  const frontendOrigin = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const allowedOrigins = getAllowedOrigins();
 
   // CORS configuration
   app.use(cors({
-    origin: frontendOrigin,
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`Origin ${origin} is not allowed by CORS`));
+    },
     credentials: true
   }));
 
@@ -99,6 +115,12 @@ const createApp = () => {
       });
     }
 
+    if (err.message && err.message.includes('not allowed by CORS')) {
+      return res.status(403).json({
+        message: err.message
+      });
+    }
+
     res.status(500).json({
       message: 'Internal server error',
       error: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
@@ -117,7 +139,7 @@ const createRealtimeServer = (app) => {
   const server = http.createServer(app);
   const io = new SocketIOServer(server, {
     cors: {
-      origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+      origin: getAllowedOrigins(),
       credentials: true,
     },
   });
