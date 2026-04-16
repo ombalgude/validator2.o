@@ -6,6 +6,46 @@
 const axios = require('axios');
 const FormData = require('form-data');
 
+const extractServiceErrorMessage = (error, fallbackMessage) => {
+    const responseData = error?.response?.data;
+
+    if (typeof responseData?.detail === 'string' && responseData.detail.trim()) {
+        return responseData.detail;
+    }
+
+    if (Array.isArray(responseData?.detail) && responseData.detail.length > 0) {
+        return responseData.detail
+            .map((entry) => {
+                if (typeof entry === 'string') {
+                    return entry;
+                }
+
+                if (entry && typeof entry === 'object') {
+                    const location = Array.isArray(entry.loc) ? entry.loc.join('.') : '';
+                    const message = entry.msg || JSON.stringify(entry);
+                    return location ? `${location}: ${message}` : message;
+                }
+
+                return String(entry);
+            })
+            .join('; ');
+    }
+
+    if (typeof responseData?.message === 'string' && responseData.message.trim()) {
+        return responseData.message;
+    }
+
+    if (typeof responseData?.error === 'string' && responseData.error.trim()) {
+        return responseData.error;
+    }
+
+    if (typeof error?.message === 'string' && error.message.trim()) {
+        return error.message;
+    }
+
+    return fallbackMessage;
+};
+
 class AIService {
     constructor() {
         this.aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8001';
@@ -70,7 +110,7 @@ class AIService {
                 validation_results: null,
                 integration_requirements: [],
                 ledger_update: [],
-                error: error.message
+                error: extractServiceErrorMessage(error, 'OCR orchestration failed')
             };
         }
     }
@@ -80,9 +120,9 @@ class AIService {
      * @param {Object} file - Uploaded file
      * @returns {Promise<Object>} OCR results
      */
-    async extractText(file) {
+    async extractText(file, extraFields = {}) {
         try {
-            const extracted = await this.postMultipart('/ai/ocr/extract', file);
+            const extracted = await this.postMultipart('/ai/ocr/extract', file, extraFields);
             const orchestration = extracted.validation_results
                 ? {
                     success: true,
@@ -114,7 +154,7 @@ class AIService {
                 success: false,
                 text: '',
                 confidence: 0,
-                error: error.message
+                error: extractServiceErrorMessage(error, 'OCR extraction failed')
             };
         }
     }
@@ -142,7 +182,7 @@ class AIService {
                 success: false,
                 tampering_detected: false,
                 tampering_score: 0,
-                error: error.message
+                error: extractServiceErrorMessage(error, 'Tampering detection failed')
             };
         }
     }
@@ -172,7 +212,7 @@ class AIService {
             return {
                 success: false,
                 match_score: 0,
-                error: error.message
+                error: extractServiceErrorMessage(error, 'Template matching failed')
             };
         }
     }
@@ -200,7 +240,7 @@ class AIService {
                 success: false,
                 anomaly_score: 0,
                 anomalies: [],
-                error: error.message
+                error: extractServiceErrorMessage(error, 'Anomaly detection failed')
             };
         }
     }
@@ -210,9 +250,9 @@ class AIService {
      * @param {Object} file - Uploaded file
      * @returns {Promise<Object>} Complete verification results
      */
-    async completeVerification(file) {
+    async completeVerification(file, extraFields = {}) {
         try {
-            const response = await this.postMultipart('/ai/verify/complete', file);
+            const response = await this.postMultipart('/ai/verify/complete', file, extraFields);
 
             return {
                 success: true,
@@ -233,7 +273,7 @@ class AIService {
                 success: false,
                 verification_status: 'error',
                 confidence_score: 0,
-                error: error.message
+                error: extractServiceErrorMessage(error, 'Complete verification failed')
             };
         }
     }
@@ -251,7 +291,9 @@ class AIService {
 
             return {
                 success: true,
-                status: 'healthy',
+                status: response.data.status || 'healthy',
+                service: response.data.service || 'unknown',
+                uptime_seconds: response.data.uptime_seconds || 0,
                 response_time: response.data.response_time || 0,
                 version: response.data.version || 'unknown'
             };
@@ -261,7 +303,7 @@ class AIService {
             return {
                 success: false,
                 status: 'unhealthy',
-                error: error.message
+                error: extractServiceErrorMessage(error, 'AI service health check failed')
             };
         }
     }
@@ -279,7 +321,8 @@ class AIService {
 
             return {
                 success: true,
-                statistics: response.data || {}
+                uptime_seconds: response.data.uptime_seconds || 0,
+                statistics: response.data.statistics || response.data || {}
             };
 
         } catch (error) {
@@ -287,7 +330,7 @@ class AIService {
             return {
                 success: false,
                 statistics: {},
-                error: error.message
+                error: extractServiceErrorMessage(error, 'Failed to get AI service statistics')
             };
         }
     }
@@ -333,7 +376,7 @@ class AIService {
                 } catch (error) {
                     errors.push({
                         fileName: files[i].originalname,
-                        error: error.message
+                        error: extractServiceErrorMessage(error, 'Batch operation failed')
                     });
                 }
             }
@@ -353,7 +396,7 @@ class AIService {
                 processed: 0,
                 errors: files.length,
                 results: [],
-                errors: [{ error: error.message }]
+                errors: [{ error: extractServiceErrorMessage(error, 'Batch processing failed') }]
             };
         }
     }

@@ -308,7 +308,10 @@ class CertificateService {
   async performAIVerification(file) {
     try {
       const startTime = Date.now();
-      const completeResult = await this.aiService.completeVerification(file);
+      const aiContext = {
+        document_type: 'certificate',
+      };
+      const completeResult = await this.aiService.completeVerification(file, aiContext);
 
       if (completeResult?.success && completeResult.verification_status !== 'error') {
         return this.normalizeCompleteVerificationResult(completeResult);
@@ -326,7 +329,7 @@ class CertificateService {
       };
 
       try {
-        const ocrResult = await this.aiService.extractText(file);
+        const ocrResult = await this.aiService.extractText(file, aiContext);
         results.ocrConfidence = ocrResult.confidence || 0;
         results.extractedText = ocrResult.text || '';
         results.orchestrator = ocrResult.validation_results
