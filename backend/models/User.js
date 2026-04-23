@@ -1,4 +1,8 @@
 const mongoose = require('mongoose');
+const Institution = require("../models/Institution.js");
+const CompanyAdmin = require("../models/company_admin.js");
+const InstitutionAdmin = require("../models/Institution_admin.js");
+const UniversityAdmin = require("../models/univercity_admin.js");
 
 const ROLE_PERMISSIONS = {
   admin: ['manage_users', 'manage_institutions', 'manage_certificates', 'verify_certificates', 'view_reports'],
@@ -74,6 +78,8 @@ const UserSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+
+    
   },
   {
     timestamps: true,
@@ -96,6 +102,7 @@ UserSchema.methods.hasPermission = function hasPermission(permission) {
 };
 
 UserSchema.set('toJSON', {
+  
   transform: (_document, returnedObject) => {
     delete returnedObject.password;
     return returnedObject;

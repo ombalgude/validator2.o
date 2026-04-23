@@ -1,9 +1,11 @@
 const contract = require("../config/blockchain");
 const generateHash = require("../utils/hash");
 
-exports.verifyDocument = async (req, res) => {
+
+const verifyDocument = async (req, res) => {
     try {
         const { documentData } = req.body;
+        const file = req.file;
 
         if (!documentData) {
             return res.status(400).json({ message: "No document data" });
@@ -18,10 +20,17 @@ exports.verifyDocument = async (req, res) => {
             verified: result[0],
             issuer: result[1],
             timestamp: Number(result[2]),
-            hash
+            hash,
+            fileUrl: file ? file.path : null
         });
 
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
+};
+
+
+
+module.exports = {
+    verifyDocument
 };

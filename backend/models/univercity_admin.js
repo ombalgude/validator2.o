@@ -1,4 +1,8 @@
 const mongoose = require('mongoose');
+const User = require("../models/User.js");
+const Institution = require("../models/Institution.js");
+const CompanyAdmin = require("../models/company_admin.js");
+const InstitutionAdmin = require("../models/Institution_admin.js");
 
 const UniversityAdminSchema = new mongoose.Schema(
   {

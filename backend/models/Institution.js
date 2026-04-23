@@ -1,4 +1,8 @@
 const mongoose = require('mongoose');
+const User = require("../models/User.js");
+const CompanyAdmin = require("../models/company_admin.js");
+const InstitutionAdmin = require("../models/Institution_admin.js");
+const UniversityAdmin = require("../models/univercity_admin.js");
 
 const currentYear = new Date().getFullYear();
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -24,12 +28,12 @@ const InstitutionSchema = new mongoose.Schema(
     institutionType: {
       type: String,
       enum: ['institution', 'college', 'university', 'board', 'company'],
-      default: 'institution',
+      default: 'institutionAdmin',
       index: true,
     },
     parentInstitutionId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Institution',
+      ref: 'InstitutionAdmin',
       default: null,
       index: true,
     },
