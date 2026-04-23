@@ -62,6 +62,11 @@ SERVICE_STATS = {
     "errors_total": 0,
 }
 
+# --- Tesseract config constants (module-level to avoid re-creation per call) ---
+_TESS_PRIMARY  = r"--oem 3 --psm 6"
+_TESS_FALLBACK = r"--oem 3 --psm 3"
+_TESS_MIN_CHARS = 20
+
 # --- MODELS ---
 # This defines exactly what data we expect from the frontend
 class OCRPayload(BaseModel):
@@ -792,44 +797,146 @@ def _decode_image_bytes(file_bytes: bytes, filename: str, content_type: Optional
 
 
 def _preprocess_image_for_ocr(image: np.ndarray) -> np.ndarray:
+    """
+    Enhanced preprocessing pipeline for certificate OCR.
+    Steps: DPI normalization → deskew → CLAHE → Otsu binarization → morph cleanup.
+    """
+    # --- Step 1: DPI normalization ---
+    # Target 300 PPI equivalent. If the shorter side is below 1000px,
+    # scale up so Tesseract has enough detail.
+    h, w = image.shape[:2]
+    min_side = min(h, w)
+    if min_side < 1000:
+        scale = 1000.0 / min_side
+        new_w = int(w * scale)
+        new_h = int(h * scale)
+        image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+
+    # --- Step 2: Convert to grayscale ---
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    thresholded = cv2.adaptiveThreshold(
-        blurred,
-        255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY,
-        11,
-        2,
+
+    # --- Step 3: CLAHE (Contrast Limited Adaptive Histogram Equalization) ---
+    # Improves local contrast — helps with faded ink and uneven lighting.
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    gray = clahe.apply(gray)
+
+    # --- Step 4: Deskew ---
+    # Detect the dominant text angle via Hough lines and rotate to correct it.
+    gray = _deskew_image(gray)
+
+    # --- Step 5: Gentle denoise ---
+    denoised = cv2.fastNlMeansDenoising(gray, h=10, templateWindowSize=7, searchWindowSize=21)
+
+    # --- Step 6: Otsu binarization ---
+    # Better than adaptive threshold for documents with uniform background.
+    _, binary = cv2.threshold(denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    # --- Step 7: Morphological cleanup ---
+    # Close small gaps in characters, open removes pepper noise.
+    close_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+    cleaned = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, close_kernel)
+    open_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 1))
+    cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_OPEN, open_kernel)
+
+    return cleaned
+
+
+def _deskew_image(gray: np.ndarray) -> np.ndarray:
+    """
+    Detect and correct document skew using Hough line transform.
+    Only corrects angles in the range -10° to +10° to avoid over-rotation.
+    Returns the original image unchanged if no confident angle is found.
+    """
+    try:
+        edges = cv2.Canny(gray, 50, 150, apertureSize=3)
+        lines = cv2.HoughLines(edges, 1, np.pi / 180, threshold=max(100, gray.shape[1] // 8))
+
+        if lines is None or len(lines) == 0:
+            return gray
+
+        angles = []
+        for line in lines:
+            rho, theta = line[0]
+            angle = (theta * 180 / np.pi) - 90
+            if -10 < angle < 10:
+                angles.append(angle)
+
+        if not angles:
+            return gray
+
+        median_angle = float(np.median(angles))
+
+        if abs(median_angle) < 0.5:
+            return gray  # negligible skew
+
+        h, w = gray.shape
+        center = (w // 2, h // 2)
+        rotation_matrix = cv2.getRotationMatrix2D(center, median_angle, 1.0)
+        rotated = cv2.warpAffine(
+            gray, rotation_matrix, (w, h),
+            flags=cv2.INTER_CUBIC,
+            borderMode=cv2.BORDER_REPLICATE,
+        )
+        return rotated
+    except Exception:
+        return gray  # never crash OCR due to deskew failure
+
+
+def _run_tesseract(image: np.ndarray, config: str) -> tuple:
+    """Run a single Tesseract pass; returns (text, word_data).
+    Uses image_to_data only — text is assembled from the word_data tokens
+    to avoid invoking the Tesseract binary twice per pass."""
+    word_data = pytesseract.image_to_data(
+        image,
+        output_type=pytesseract.Output.DICT,
+        config=config,
     )
-    kernel = np.ones((1, 1), np.uint8)
-    return cv2.morphologyEx(thresholded, cv2.MORPH_CLOSE, kernel)
+    # Reconstruct text from word tokens (same output as image_to_string)
+    words = [
+        w for w in word_data.get("text", []) if str(w).strip()
+    ]
+    text = " ".join(words).strip()
+    return text, word_data
+
+
+def _avg_confidence(word_data: Dict[str, Any]) -> float:
+    """Compute mean word confidence, ignoring sentinel -1 values."""
+    vals = []
+    for raw in word_data.get("conf", []):
+        try:
+            v = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if v >= 0:
+            vals.append(v)
+    return round(sum(vals) / len(vals), 2) if vals else 0.0
 
 
 def _extract_ocr_from_image(image: np.ndarray) -> Dict[str, Any]:
+    """
+    Run Tesseract OCR on a preprocessed image.
+    PSM 6 (uniform block) + OEM 3 (LSTM) primary; falls back to PSM 3 (auto).
+    Each Tesseract pass is a single binary call via image_to_data.
+    """
     try:
-        processed_image = _preprocess_image_for_ocr(image)
-        word_data = pytesseract.image_to_data(processed_image, output_type=pytesseract.Output.DICT)
-        extracted_text = pytesseract.image_to_string(processed_image)
+        processed = _preprocess_image_for_ocr(image)
+        text, word_data = _run_tesseract(processed, _TESS_PRIMARY)
+        psm_used = "6"
 
-        confidences = []
-        for confidence in word_data.get("conf", []):
-            try:
-                value = float(confidence)
-            except (TypeError, ValueError):
-                continue
-            if value >= 0:
-                confidences.append(value)
+        if len(text) < _TESS_MIN_CHARS:
+            logger.info("PSM 6 returned %d chars, retrying with PSM 3", len(text))
+            text, word_data = _run_tesseract(processed, _TESS_FALLBACK)
+            psm_used = "3"
 
-        average_confidence = sum(confidences) / len(confidences) if confidences else 0.0
         return {
-            "text": extracted_text.strip(),
-            "confidence": round(average_confidence, 2),
+            "text": text,
+            "confidence": _avg_confidence(word_data),
             "word_data": word_data,
+            "psm_used": psm_used,
         }
     except pytesseract.TesseractNotFoundError as error:
         raise RuntimeError(
-            "Tesseract OCR is not installed or not available in PATH. Install Tesseract to enable image OCR."
+            "Tesseract OCR is not installed or not available in PATH."
         ) from error
 
 
@@ -1006,18 +1113,43 @@ def _calculate_verification_confidence(
     return round(max(0.0, min(100.0, score)), 2)
 
 
+def _build_tampering_output(raw_bytes: bytes) -> Dict[str, Any]:
+    """Run tampering analysis and normalise the result into a consistent dict."""
+    details = analyze_certificate_security(raw_bytes)
+    return {
+        "tampering_detected": bool(details.get("tampering_detected", False)),
+        "confidence_score": _percentage(details.get("confidence_score", 0)),
+        "analysis_details": details.get("analysis_details", {}),
+        "recommendations": details.get("recommendations", []),
+        "certificate_analysis": details.get("certificate_analysis", {}),
+        "is_likely_authentic": bool(details.get("is_likely_authentic", False)),
+    }
+
+
+async def _read_upload(file: UploadFile) -> tuple:
+    """Read upload bytes and return (bytes, filename, content_type).
+    Raises 400 if the file is empty."""
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    return file_bytes, file.filename or "uploaded-document", file.content_type
+
+
 async def _run_complete_verification(
     file: UploadFile,
     document_type: Optional[str] = None,
     schema_hint: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
-    filename = file.filename or "uploaded-document"
-    content_type = file.content_type
-    file_bytes = await file.read()
-    if not file_bytes:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty")
-
+    file_bytes, filename, content_type = await _read_upload(file)
     started_at = time.perf_counter()
+
+    # Render PDF to image once — reused by both OCR and tampering.
+    image_bytes = (
+        _render_pdf_first_page_to_png(file_bytes)
+        if _is_pdf_upload(filename, content_type)
+        else file_bytes
+    )
+
     ocr_output = _extract_text_from_upload(file_bytes, filename, content_type)
     orchestration_output = _process_ocr_payload(
         OCRPayload(
@@ -1027,20 +1159,11 @@ async def _run_complete_verification(
             schema_hint=schema_hint,
         )
     )
-
-    tampering_details = analyze_certificate_security(
-        _render_pdf_first_page_to_png(file_bytes) if _is_pdf_upload(filename, content_type) else file_bytes
-    )
-    tampering_output = {
-        "tampering_detected": bool(tampering_details.get("tampering_detected", False)),
-        "confidence_score": _percentage(tampering_details.get("confidence_score", 0)),
-        "analysis_details": tampering_details.get("analysis_details", {}),
-        "recommendations": tampering_details.get("recommendations", []),
-    }
+    tampering_output = _build_tampering_output(image_bytes)
     template_output = _build_template_match_result(ocr_output, orchestration_output, filename, content_type)
     anomaly_output = _build_anomaly_result(ocr_output, tampering_output, orchestration_output)
-
     processing_time = round((time.perf_counter() - started_at) * 1000, 2)
+
     verification_status = _determine_verification_status(
         ocr_output["confidence"],
         tampering_output["confidence_score"],
@@ -1051,34 +1174,30 @@ async def _run_complete_verification(
         tampering_output["confidence_score"],
         anomaly_output["anomaly_score"],
     )
-    recommendations = list(
-        dict.fromkeys(
-            list(tampering_output.get("recommendations", []))
-            + [requirement["reason"] for requirement in orchestration_output.get("integration_requirements", [])]
-            + anomaly_output.get("anomalies", [])
-        )
-    )
+    recommendations = list(dict.fromkeys(
+        tampering_output.get("recommendations", [])
+        + [r["reason"] for r in orchestration_output.get("integration_requirements", [])]
+        + anomaly_output.get("anomalies", [])
+    ))
 
     return {
         "success": True,
         "verification_status": verification_status,
         "confidence_score": confidence_score,
+        "processing_time": processing_time,
         "ocr_results": {
             "text": ocr_output["text"],
             "confidence": ocr_output["confidence"],
             "language": ocr_output.get("language", "en"),
-            "processing_time": processing_time,
+            "source": ocr_output.get("source", "image_ocr"),
             "structured_data": ocr_output.get("structured_data", {}),
             "schema_validation": ocr_output.get("schema_validation", {}),
-            "source": ocr_output.get("source", "image_ocr"),
-            "orchestration": orchestration_output,
         },
+        "orchestration_results": orchestration_output,
         "tampering_results": tampering_output,
         "template_results": template_output,
         "anomaly_results": anomaly_output,
-        "orchestration_results": orchestration_output,
         "recommendations": recommendations,
-        "processing_time": processing_time,
     }
 
 # --- ROUTES ---
@@ -1128,11 +1247,8 @@ async def extract_ocr(
     try:
         _record_stat("ocr_requests")
         started_at = time.perf_counter()
-        file_bytes = await file.read()
-        if not file_bytes:
-            raise HTTPException(status_code=400, detail="Uploaded file is empty")
-
-        ocr_output = _extract_text_from_upload(file_bytes, file.filename or "", file.content_type)
+        file_bytes, filename, content_type = await _read_upload(file)
+        ocr_output = _extract_text_from_upload(file_bytes, filename, content_type)
         orchestration = _process_ocr_payload(
             OCRPayload(
                 raw_text=ocr_output["text"],
@@ -1140,7 +1256,6 @@ async def extract_ocr(
                 document_type=document_type,
             )
         )
-
         return {
             "success": True,
             "text": ocr_output["text"],
@@ -1166,22 +1281,13 @@ async def extract_ocr(
 async def verify_tampering(file: UploadFile = File(...)):
     try:
         _record_stat("tampering_requests")
-        file_bytes = await file.read()
-        if not file_bytes:
-            raise HTTPException(status_code=400, detail="Uploaded file is empty")
-
-        analysis = analyze_certificate_security(
-            _render_pdf_first_page_to_png(file_bytes) if _is_pdf_upload(file.filename or "", file.content_type) else file_bytes
+        file_bytes, filename, content_type = await _read_upload(file)
+        image_bytes = (
+            _render_pdf_first_page_to_png(file_bytes)
+            if _is_pdf_upload(filename, content_type)
+            else file_bytes
         )
-
-        return {
-            "tampering_detected": bool(analysis.get("tampering_detected", False)),
-            "confidence_score": _percentage(analysis.get("confidence_score", 0)),
-            "analysis_details": analysis.get("analysis_details", {}),
-            "recommendations": analysis.get("recommendations", []),
-            "certificate_analysis": analysis.get("certificate_analysis", {}),
-            "is_likely_authentic": bool(analysis.get("is_likely_authentic", False)),
-        }
+        return _build_tampering_output(image_bytes)
     except HTTPException:
         _record_stat("tampering_requests", error=True, count_request=False)
         raise
@@ -1198,19 +1304,15 @@ async def verify_template(
 ):
     try:
         _record_stat("template_requests")
-        file_bytes = await file.read()
-        if not file_bytes:
-            raise HTTPException(status_code=400, detail="Uploaded file is empty")
-
-        ocr_output = _extract_text_from_upload(file_bytes, file.filename or "", file.content_type)
+        file_bytes, filename, content_type = await _read_upload(file)
+        ocr_output = _extract_text_from_upload(file_bytes, filename, content_type)
         orchestration = _process_ocr_payload(
             OCRPayload(raw_text=ocr_output["text"], confidence=ocr_output["confidence"])
         )
-        template_output = _build_template_match_result(ocr_output, orchestration, file.filename or "", file.content_type)
+        result = _build_template_match_result(ocr_output, orchestration, filename, content_type)
         if template_id:
-            template_output["template_id"] = template_id
-
-        return template_output
+            result["template_id"] = template_id
+        return result
     except HTTPException:
         _record_stat("template_requests", error=True, count_request=False)
         raise
@@ -1224,20 +1326,17 @@ async def verify_template(
 async def analyze_anomaly(file: UploadFile = File(...)):
     try:
         _record_stat("anomaly_requests")
-        file_bytes = await file.read()
-        if not file_bytes:
-            raise HTTPException(status_code=400, detail="Uploaded file is empty")
-
-        ocr_output = _extract_text_from_upload(file_bytes, file.filename or "", file.content_type)
+        file_bytes, filename, content_type = await _read_upload(file)
+        image_bytes = (
+            _render_pdf_first_page_to_png(file_bytes)
+            if _is_pdf_upload(filename, content_type)
+            else file_bytes
+        )
+        ocr_output = _extract_text_from_upload(file_bytes, filename, content_type)
         orchestration = _process_ocr_payload(
             OCRPayload(raw_text=ocr_output["text"], confidence=ocr_output["confidence"])
         )
-        tampering_details = analyze_certificate_security(
-            _render_pdf_first_page_to_png(file_bytes) if _is_pdf_upload(file.filename or "", file.content_type) else file_bytes
-        )
-        tampering_output = {
-            "confidence_score": _percentage(tampering_details.get("confidence_score", 0)),
-        }
+        tampering_output = _build_tampering_output(image_bytes)
         return _build_anomaly_result(ocr_output, tampering_output, orchestration)
     except HTTPException:
         _record_stat("anomaly_requests", error=True, count_request=False)
