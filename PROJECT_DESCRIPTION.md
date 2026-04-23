@@ -29,7 +29,7 @@ This project implements a distributed certificate authenticity validation platfo
 Academic and institutional documents are frequently verified in fragmented, manual, and non-standard ways. This creates several practical problems:
 
 - forged or edited certificates may pass superficial inspection,
-- employers or third-party verifiers may lack direct access to issuer records,
+- employers or third-party reviewers may lack direct access to issuer records,
 - institutions may not have a standardized digital verification pipeline,
 - paper/PDF/image documents must often be validated from noisy scans,
 - verification events may not be transparently logged,
@@ -50,7 +50,7 @@ The implemented system appears to pursue the following major objectives:
 1. Create a centralized trusted store of certificate records uploaded by authorized institutional actors.
 2. Compare candidate documents against trusted records using deterministic content hashing.
 3. Detect suspicious or fake documents using OCR confidence, anomaly scoring, and image-level tampering heuristics.
-4. Support multiple operational roles such as admins, institution admins, university admins, company admins, verifiers, and general users.
+4. Support multiple operational roles such as admins, institution admins, university admins, company admins, and general users.
 5. Provide explainable verification outputs rather than a black-box pass/fail response.
 6. Maintain verification logs for traceability and auditability.
 7. Offer optional blockchain integration for immutable document registration and later public verification.
@@ -168,7 +168,7 @@ Its responsibilities include:
 | `/api/institutions` | Institution CRUD and verification |
 | `/api/dashboard` | Admin metrics, trends, alerts |
 | `/api/verification-logs` | Audit trail access |
-| `/api/access` | Institution admin, university admin, company admin, and verifier profile management |
+| `/api/access` | Institution admin, university admin, and company admin profile management |
 | `/api/admin/blockchain` | Admin-only blockchain document registration |
 | `/api/verify` | Public blockchain verification endpoint |
 | `/api/health` | Service health |
@@ -219,7 +219,6 @@ MongoDB is the primary system of record. The main persisted entity groups repres
 - institution admin profiles,
 - university admin profiles,
 - company admin profiles,
-- and verifier profiles.
 
 The database is initialized in Docker with indexes for common access paths such as:
 
@@ -273,7 +272,6 @@ Default roles defined in the backend are:
 - `institution_admin`
 - `university_admin`
 - `company_admin`
-- `verifier`
 - `user`
 
 ### 7.2 Institution Model
@@ -344,7 +342,7 @@ Each verification log records:
 - user agent,
 - verification method,
 - certificate hash,
-- verifier role,
+- actor role,
 - and free-form details.
 
 This provides traceability for audits and retrospective analysis.
@@ -356,14 +354,13 @@ The system does not rely only on a single user role string. It also defines spec
 - institution admins,
 - university admins,
 - company admins,
-- and verifiers.
 
 These profile records store scoped permissions such as:
 
 - institution assignment,
 - company scope,
 - assigned institution lists,
-- verifier type,
+- access-scope settings,
 - approval capability,
 - admin codes,
 - and active/inactive profile state.
@@ -377,20 +374,15 @@ The repository implements a multi-actor trust model:
 | Role | Effective capability |
 | --- | --- |
 | `admin` | Global system control |
-| `institution_admin` | Trusted certificate upload for one institution |
+| `institution_admin` | Certificate verification/log access for allowed institutions |
 | `university_admin` | Institution/university-scoped upload and management |
-| `company_admin` | Certificate verification/log access for allowed institutions |
-| `verifier` | Internal or external verification access |
-| `user` | Basic account with limited access |
+| `company_admin` | Certificate verification/log access for allowed Company Hiring Team |
 
 Institution scoping is especially important:
 
 - admins are unrestricted,
 - institution and university admins are limited to their assigned institution,
-- company admins can be limited to specific institutions or all verified institutions,
-- internal verifiers can be globally trusted,
-- external verifiers are limited to assigned institutions,
-- general users do not receive institutional record visibility.
+- company admins can be limited to specific institutions or all verified institutions
 
 This makes the project suitable for discussing **role-aware trust architectures** in research writing.
 
@@ -448,7 +440,7 @@ This is a strong research feature because it combines deterministic matching wit
 
 ### 9.5 Manual Review Workflow
 
-Admins, company admins, and verifiers can manually override certificate status through `PUT /api/certificates/:id/verify`.
+Admins and company admins can manually override certificate status through `PUT /api/certificates/:id/verify`.
 
 This supports:
 
