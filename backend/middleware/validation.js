@@ -1,5 +1,6 @@
 const { body, validationResult } = require('express-validator');
 const { normalizeCertificateInput } = require('../utils/certificatePayload');
+const SELF_SIGNUP_ROLES = ['institution_admin', 'university_admin', 'company_admin'];
 
 const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
@@ -66,6 +67,10 @@ const validateUserRegistration = [
   body('password')
     .isLength({ min: 8 })
     .withMessage('Password must be at least 8 characters long'),
+  body('role')
+    .optional()
+    .isIn(SELF_SIGNUP_ROLES)
+    .withMessage('Please choose a valid signup role'),
   handleValidationErrors
 ];
 

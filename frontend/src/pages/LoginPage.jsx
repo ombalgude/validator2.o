@@ -36,7 +36,9 @@ export default function LoginPage() {
 				password,
 			});
 
-			navigate(getDefaultRouteForRole(currentUser?.role), { replace: true });
+			navigate(getDefaultRouteForRole(currentUser?.role, currentUser), {
+				replace: true,
+			});
 		} catch (requestError) {
 			setError(
 				getErrorMessage(
@@ -142,8 +144,8 @@ export default function LoginPage() {
 							Unlock the Power of Trust.
 						</h1>
 						<p className="text-indigo-200 leading-relaxed">
-							Use the same authentication flow across users, verifiers, company
-							admins, and institution teams.
+							Use the same authentication flow across users, company admins, and
+							institution or university admin teams.
 						</p>
 					</div>
 					<ul className="space-y-4">

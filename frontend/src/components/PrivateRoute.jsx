@@ -19,7 +19,7 @@ export default function PrivateRoute({ children, roles = [] }) {
 	}
 
 	if (roles.length > 0 && !roles.includes(user?.role)) {
-		return <Navigate to={getDefaultRouteForRole(user?.role)} replace />;
+		return <Navigate to={getDefaultRouteForRole(user?.role, user)} replace />;
 	}
 
 	return children;

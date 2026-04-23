@@ -19,7 +19,7 @@ export default function Navbar() {
 				<div className="flex items-center gap-3">
 					<Link
 						className="text-sm text-slate-600 hover:text-slate-900"
-						to={getDefaultRouteForRole(user?.role)}
+						to={getDefaultRouteForRole(user?.role, user)}
 					>
 						Home
 					</Link>
