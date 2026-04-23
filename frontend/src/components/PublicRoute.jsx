@@ -17,7 +17,7 @@ export default function PublicRoute({ children }) {
 	if (isAuthenticated) {
 		return (
 			<Navigate
-				to={getDefaultRouteForRole(user?.role)}
+				to={getDefaultRouteForRole(user?.role, user)}
 				replace
 			/>
 		);

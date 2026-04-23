@@ -25,12 +25,15 @@ const verifyDocument = async (req, res) => {
         });
 
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ message: error.message });
     }
 };
+<<<<<<< HEAD
 
 
 
 module.exports = {
     verifyDocument
 };
+=======
+>>>>>>> 95f0fbbcfbc1d1dbca177a972cbcd8e93cc1f4fe

@@ -735,7 +735,7 @@ export default function CertificatesPage() {
 										</h3>
 										<p className="text-sm text-slate-500">
 											Submit `PUT /certificates/:id/verify` for manual review or
-											company/verifier overrides.
+											admin and company-admin overrides.
 										</p>
 									</div>
 
@@ -824,8 +824,7 @@ export default function CertificatesPage() {
 							) : (
 								<div className="rounded-xl border border-dashed border-slate-300 px-4 py-5 text-sm text-slate-500">
 									Your role can inspect certificate details here, but manual
-									status overrides are limited to admins, verifiers, and company
-									admins.
+									status overrides are limited to admins and company admins.
 								</div>
 							)}
 						</div>
@@ -969,8 +968,8 @@ export default function CertificatesPage() {
 				) : (
 					<div className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">
 						Candidate validation is available to admins, institution admins,
-						university admins, company admins, and verifiers. Your current role
-						can still browse certificate records above.
+						university admins, and company admins. Your current role can still
+						browse certificate records above.
 					</div>
 				)}
 			</section>

@@ -18,8 +18,8 @@ const certificateService = new CertificateService();
 const DEFAULT_LIST_LIMIT = 10;
 const MAX_LIST_LIMIT = 100;
 const TRUSTED_UPLOAD_ROLES = ['admin', 'institution_admin', 'university_admin'];
-const VALIDATION_ROLES = ['admin', 'institution_admin', 'university_admin', 'company_admin', 'verifier'];
-const MANUAL_VERIFY_ROLES = ['admin', 'verifier', 'company_admin'];
+const VALIDATION_ROLES = ['admin', 'institution_admin', 'university_admin', 'company_admin'];
+const MANUAL_VERIFY_ROLES = ['admin', 'company_admin'];
 
 const resolveCertificateQuery = (identifier) => {
   const trimmedIdentifier = String(identifier || '').trim();
@@ -106,7 +106,12 @@ router.post(
   validateCertificate,
   async (req, res) => {
     try {
-      const result = await certificateService.createTrustedCertificate(req.file, req.user, req.body);
+      const result = await certificateService.uploadAndVerify(
+        req.file,
+        req.user,
+        req.body,
+        buildRequestDetails(req)
+      );
       res.status(201).json(result);
     } catch (error) {
       console.error('Certificate upload error:', error);

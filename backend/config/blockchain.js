@@ -1,6 +1,15 @@
 const { ethers } = require("ethers");
 require("dotenv").config();
 
+const requiredEnvVars = ["RPC_URL", "PRIVATE_KEY", "CONTRACT_ADDRESS"];
+const missingEnvVars = requiredEnvVars.filter((envVar) => !process.env[envVar]);
+
+if (missingEnvVars.length > 0) {
+  throw new Error(
+    `Blockchain configuration is missing: ${missingEnvVars.join(", ")}`
+  );
+}
+
 const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
 
 // Admin wallet (university)

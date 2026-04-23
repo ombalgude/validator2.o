@@ -2,16 +2,32 @@ const assert = require('node:assert/strict');
 const { afterEach, describe, test } = require('node:test');
 const Certificate = require('../models/Certificate');
 const CompanyAdmin = require('../models/company_admin');
-const Verifier = require('../models/Verifier');
 const CertificateService = require('../services/certificate_service');
 const { computeCertificateHash } = require('../utils/certificatePayload');
 
 const originalCertificateFindOne = Certificate.findOne;
 const originalCompanyAdminFindOne = CompanyAdmin.findOne;
-const originalVerifierFindOne = Verifier.findOne;
 
 const createService = () => new CertificateService({
   aiService: {
+    completeVerification: async () => ({
+      success: true,
+      verification_status: 'verified',
+      confidence_score: 92,
+      ocr_results: { confidence: 90, text: 'sample text' },
+      tampering_results: { confidence_score: 5, tampering_detected: false },
+      template_results: { match_score: 91, template_id: 'template-1' },
+      anomaly_results: { anomaly_score: 4, anomalies: [] },
+      recommendations: [],
+      processing_time: 25,
+      orchestration_results: {
+        validation_results: {
+          overall_status: 'Passed',
+        },
+        integration_requirements: [],
+        ledger_update: [],
+      },
+    }),
     extractText: async () => ({ confidence: 90, text: 'sample text' }),
     detectTampering: async () => ({ tampering_score: 5, tampering_detected: false }),
     matchTemplate: async () => ({ match_score: 91, template_id: 'template-1' }),
@@ -26,7 +42,6 @@ const createService = () => new CertificateService({
 afterEach(() => {
   Certificate.findOne = originalCertificateFindOne;
   CompanyAdmin.findOne = originalCompanyAdminFindOne;
-  Verifier.findOne = originalVerifierFindOne;
 });
 
 const SAMPLE_CERTIFICATE_INPUT = {
@@ -64,6 +79,22 @@ const SAMPLE_CERTIFICATE_INPUT = {
 };
 
 describe('CertificateService', () => {
+  test('performAIVerification prefers the complete verification payload when available', async () => {
+    const service = createService();
+
+    const result = await service.performAIVerification({
+      originalname: 'certificate.png',
+      mimetype: 'image/png',
+      buffer: Buffer.from('sample'),
+    });
+
+    assert.equal(result.ocrConfidence, 90);
+    assert.equal(result.tamperScore, 5);
+    assert.equal(result.templateMatch, 91);
+    assert.equal(result.anomalyScore, 4);
+    assert.equal(result.orchestrator.validation_results.overall_status, 'Passed');
+  });
+
   test('buildCertificateQuery keeps company admins within their scoped institutions', async () => {
     CompanyAdmin.findOne = () => ({
       lean: async () => ({
@@ -90,23 +121,6 @@ describe('CertificateService', () => {
       institutionId: { $in: ['inst-2'] },
       certificateId: 'CERT-123',
     });
-  });
-
-  test('external verifiers cannot access certificates outside their assigned institutions', async () => {
-    Verifier.findOne = () => ({
-      lean: async () => ({
-        verifierType: 'external',
-        assignedInstitutionIds: ['inst-1'],
-      }),
-    });
-
-    const service = createService();
-    const canAccess = await service.canAccessCertificate(
-      { institutionId: 'inst-2' },
-      { _id: 'user-1', role: 'verifier' }
-    );
-
-    assert.equal(canAccess, false);
   });
 
   test('institution-level upload permissions stay limited to the user institution', () => {

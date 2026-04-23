@@ -39,10 +39,12 @@ export default function LoginInstitution() {
 				password,
 			});
 
-			navigate(getDefaultRouteForRole(currentUser?.role), { replace: true });
+			navigate(getDefaultRouteForRole(currentUser?.role, currentUser), {
+				replace: true,
+			});
 		} catch (requestError) {
 			setError(
-				getErrorMessage(requestError, "Unable to sign in to the institution portal.")
+				getErrorMessage(requestError, "Unable to sign in to the organization portal.")
 			);
 		} finally {
 			setLoading(false);
@@ -69,17 +71,17 @@ export default function LoginInstitution() {
 							ValidX
 						</div>
 						<h1 className="text-4xl font-bold leading-tight mb-4 text-white">
-							Institution Portal
+							Organization Portal
 						</h1>
 						<p className="text-indigo-200 leading-relaxed">
-							Institution and university admins use the same backend auth flow,
-							then land on trusted upload tooling automatically when their role
-							permits it.
+							Institution, university, and company admins use the same backend
+							auth flow, then land in the workspace their assigned access scope
+							allows.
 						</p>
 					</div>
 					<ul className="space-y-4">
 						<Feature icon={FileUp} text="Trusted record uploads and bulk intake" />
-						<Feature icon={University} text="Institution-scoped access once assigned" />
+						<Feature icon={University} text="Organization-scoped access once assigned" />
 						<Feature icon={ShieldAlert} text="Manual review updates with live status events" />
 					</ul>
 				</div>
@@ -87,21 +89,22 @@ export default function LoginInstitution() {
 				<div className="w-full md:w-1/2 p-8 md:p-12 bg-white/10 backdrop-blur-sm border border-l-0 border-zinc-300/50 rounded-2xl rounded-l-none">
 					<h2 className="text-3xl font-bold text-white mb-2">Portal Access</h2>
 					<p className="text-gray-400 mb-8">
-						Sign in with the account an admin has already granted institution or
-						university access to.
+						Sign in with the account you registered for institution, university,
+						or company admin access. Organization scope appears once the related
+						backend profile is assigned.
 					</p>
 
 					<form onSubmit={submit} className="space-y-6">
 						<div>
 							<label className="block mb-1 text-sm font-medium text-gray-300">
-								Institution Email
+								Organization Email
 							</label>
 							<div className="relative">
 								<Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
 								<input
 									className="w-full pl-10 pr-3 py-2.5 border border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors placeholder-gray-500"
 									type="email"
-									placeholder="admin@university.edu"
+									placeholder="admin@organization.com"
 									value={email}
 									onChange={(event) => setEmail(event.target.value)}
 									required

@@ -236,6 +236,14 @@ const VerificationResultsSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    recommendations: {
+      type: [String],
+      default: [],
+    },
+    orchestrator: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
   },
   { _id: false, suppressReservedKeysWarning: true }
 );

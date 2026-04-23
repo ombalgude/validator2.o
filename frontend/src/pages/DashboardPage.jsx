@@ -72,7 +72,7 @@ export default function DashboardPage() {
 
 	useEffect(() => {
 		if (!canAccessDashboard(user?.role)) {
-			navigate(getDefaultRouteForRole(user?.role), { replace: true });
+			navigate(getDefaultRouteForRole(user?.role, user), { replace: true });
 		}
 	}, [navigate, user?.role]);
 
@@ -112,7 +112,7 @@ export default function DashboardPage() {
 				);
 			} catch (requestError) {
 				if (requestError?.response?.status === 403) {
-					navigate(getDefaultRouteForRole(user?.role), { replace: true });
+					navigate(getDefaultRouteForRole(user?.role, user), { replace: true });
 					return;
 				}
 
@@ -235,7 +235,7 @@ export default function DashboardPage() {
 											<th className="pb-3 pr-4 font-medium">Certificate</th>
 											<th className="pb-3 pr-4 font-medium">Student</th>
 											<th className="pb-3 pr-4 font-medium">Result</th>
-											<th className="pb-3 pr-4 font-medium">Verifier</th>
+											<th className="pb-3 pr-4 font-medium">Reviewed By</th>
 											<th className="pb-3 font-medium">When</th>
 										</tr>
 									</thead>

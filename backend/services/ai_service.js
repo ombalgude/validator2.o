@@ -6,31 +6,92 @@
 const axios = require('axios');
 const FormData = require('form-data');
 
+const extractServiceErrorMessage = (error, fallbackMessage) => {
+    const responseData = error?.response?.data;
+
+    if (typeof responseData?.detail === 'string' && responseData.detail.trim()) {
+        return responseData.detail;
+    }
+
+    if (Array.isArray(responseData?.detail) && responseData.detail.length > 0) {
+        return responseData.detail
+            .map((entry) => {
+                if (typeof entry === 'string') {
+                    return entry;
+                }
+
+                if (entry && typeof entry === 'object') {
+                    const location = Array.isArray(entry.loc) ? entry.loc.join('.') : '';
+                    const message = entry.msg || JSON.stringify(entry);
+                    return location ? `${location}: ${message}` : message;
+                }
+
+                return String(entry);
+            })
+            .join('; ');
+    }
+
+    if (typeof responseData?.message === 'string' && responseData.message.trim()) {
+        return responseData.message;
+    }
+
+    if (typeof responseData?.error === 'string' && responseData.error.trim()) {
+        return responseData.error;
+    }
+
+    if (typeof error?.message === 'string' && error.message.trim()) {
+        return error.message;
+    }
+
+    return fallbackMessage;
+};
+
 class AIService {
     constructor() {
         this.aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8001';
         this.timeout = 30000; // 30 seconds timeout
     }
 
-    /**
-     * Extract text from document using OCR
-     * @param {Object} file - Uploaded file
-     * @returns {Promise<Object>} OCR results
-     */
-    async extractText(file) {
-        try {
-            const formData = new FormData();
-            formData.append('file', file.buffer, {
-                filename: file.originalname,
-                contentType: file.mimetype
-            });
+    createMultipartPayload(file, extraFields = {}) {
+        const formData = new FormData();
+        formData.append('file', file.buffer, {
+            filename: file.originalname,
+            contentType: file.mimetype
+        });
 
+        Object.entries(extraFields).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== '') {
+                formData.append(key, value);
+            }
+        });
+
+        return formData;
+    }
+
+    async postMultipart(path, file, extraFields = {}) {
+        const formData = this.createMultipartPayload(file, extraFields);
+        const response = await axios.post(
+            `${this.aiServiceUrl}${path}`,
+            formData,
+            {
+                headers: {
+                    ...formData.getHeaders(),
+                },
+                timeout: this.timeout
+            }
+        );
+
+        return response.data || {};
+    }
+
+    async processOcrPayload(payload) {
+        try {
             const response = await axios.post(
-                `${this.aiServiceUrl}/ai/ocr/extract`,
-                formData,
+                `${this.aiServiceUrl}/ai/process-ocr`,
+                payload,
                 {
                     headers: {
-                        ...formData.getHeaders(),
+                        'Content-Type': 'application/json',
                     },
                     timeout: this.timeout
                 }
@@ -38,10 +99,53 @@ class AIService {
 
             return {
                 success: true,
-                text: response.data.text || '',
-                confidence: response.data.confidence || 0,
-                language: response.data.language || 'en',
-                processing_time: response.data.processing_time || 0
+                validation_results: response.data.validation_results || null,
+                integration_requirements: response.data.integration_requirements || [],
+                ledger_update: response.data.ledger_update || [],
+            };
+        } catch (error) {
+            console.error('OCR orchestration error:', error);
+            return {
+                success: false,
+                validation_results: null,
+                integration_requirements: [],
+                ledger_update: [],
+                error: extractServiceErrorMessage(error, 'OCR orchestration failed')
+            };
+        }
+    }
+
+    /**
+     * Extract text from document using OCR
+     * @param {Object} file - Uploaded file
+     * @returns {Promise<Object>} OCR results
+     */
+    async extractText(file, extraFields = {}) {
+        try {
+            const extracted = await this.postMultipart('/ai/ocr/extract', file, extraFields);
+            const orchestration = extracted.validation_results
+                ? {
+                    success: true,
+                    validation_results: extracted.validation_results,
+                    integration_requirements: extracted.integration_requirements || [],
+                    ledger_update: extracted.ledger_update || [],
+                }
+                : await this.processOcrPayload({
+                    raw_text: extracted.text || '',
+                    confidence: extracted.confidence || 0,
+                });
+
+            return {
+                success: true,
+                text: extracted.text || '',
+                confidence: extracted.confidence || 0,
+                language: extracted.language || 'en',
+                processing_time: extracted.processing_time || 0,
+                structured_data: extracted.structured_data || {},
+                schema_validation: extracted.schema_validation || {},
+                validation_results: orchestration.validation_results || null,
+                integration_requirements: orchestration.integration_requirements || [],
+                ledger_update: orchestration.ledger_update || [],
             };
 
         } catch (error) {
@@ -50,7 +154,7 @@ class AIService {
                 success: false,
                 text: '',
                 confidence: 0,
-                error: error.message
+                error: extractServiceErrorMessage(error, 'OCR extraction failed')
             };
         }
     }
@@ -62,29 +166,14 @@ class AIService {
      */
     async detectTampering(file) {
         try {
-            const formData = new FormData();
-            formData.append('file', file.buffer, {
-                filename: file.originalname,
-                contentType: file.mimetype
-            });
-
-            const response = await axios.post(
-                `${this.aiServiceUrl}/ai/verify/tampering`,
-                formData,
-                {
-                    headers: {
-                        ...formData.getHeaders(),
-                    },
-                    timeout: this.timeout
-                }
-            );
+            const response = await this.postMultipart('/ai/verify/tampering', file);
 
             return {
                 success: true,
-                tampering_detected: response.data.tampering_detected || false,
-                tampering_score: response.data.confidence_score || 0,
-                analysis_details: response.data.analysis_details || {},
-                recommendations: response.data.recommendations || []
+                tampering_detected: response.tampering_detected || false,
+                tampering_score: response.confidence_score || 0,
+                analysis_details: response.analysis_details || {},
+                recommendations: response.recommendations || []
             };
 
         } catch (error) {
@@ -93,7 +182,7 @@ class AIService {
                 success: false,
                 tampering_detected: false,
                 tampering_score: 0,
-                error: error.message
+                error: extractServiceErrorMessage(error, 'Tampering detection failed')
             };
         }
     }
@@ -106,33 +195,16 @@ class AIService {
      */
     async matchTemplate(file, templateId = null) {
         try {
-            const formData = new FormData();
-            formData.append('file', file.buffer, {
-                filename: file.originalname,
-                contentType: file.mimetype
+            const response = await this.postMultipart('/ai/verify/template', file, {
+                template_id: templateId,
             });
-
-            if (templateId) {
-                formData.append('template_id', templateId);
-            }
-
-            const response = await axios.post(
-                `${this.aiServiceUrl}/ai/verify/template`,
-                formData,
-                {
-                    headers: {
-                        ...formData.getHeaders(),
-                    },
-                    timeout: this.timeout
-                }
-            );
 
             return {
                 success: true,
-                match_score: response.data.match_score || 0,
-                template_id: response.data.template_id || null,
-                matched_template: response.data.matched_template || null,
-                confidence: response.data.confidence || 0
+                match_score: response.match_score || 0,
+                template_id: response.template_id || null,
+                matched_template: response.matched_template || null,
+                confidence: response.confidence || 0
             };
 
         } catch (error) {
@@ -140,7 +212,7 @@ class AIService {
             return {
                 success: false,
                 match_score: 0,
-                error: error.message
+                error: extractServiceErrorMessage(error, 'Template matching failed')
             };
         }
     }
@@ -152,29 +224,14 @@ class AIService {
      */
     async detectAnomalies(file) {
         try {
-            const formData = new FormData();
-            formData.append('file', file.buffer, {
-                filename: file.originalname,
-                contentType: file.mimetype
-            });
-
-            const response = await axios.post(
-                `${this.aiServiceUrl}/ai/analyze/anomaly`,
-                formData,
-                {
-                    headers: {
-                        ...formData.getHeaders(),
-                    },
-                    timeout: this.timeout
-                }
-            );
+            const response = await this.postMultipart('/ai/analyze/anomaly', file);
 
             return {
                 success: true,
-                anomaly_score: response.data.anomaly_score || 0,
-                anomalies: response.data.anomalies || [],
-                confidence: response.data.confidence || 0,
-                analysis_details: response.data.analysis_details || {}
+                anomaly_score: response.anomaly_score || 0,
+                anomalies: response.anomalies || [],
+                confidence: response.confidence || 0,
+                analysis_details: response.analysis_details || {}
             };
 
         } catch (error) {
@@ -183,7 +240,7 @@ class AIService {
                 success: false,
                 anomaly_score: 0,
                 anomalies: [],
-                error: error.message
+                error: extractServiceErrorMessage(error, 'Anomaly detection failed')
             };
         }
     }
@@ -193,35 +250,21 @@ class AIService {
      * @param {Object} file - Uploaded file
      * @returns {Promise<Object>} Complete verification results
      */
-    async completeVerification(file) {
+    async completeVerification(file, extraFields = {}) {
         try {
-            const formData = new FormData();
-            formData.append('file', file.buffer, {
-                filename: file.originalname,
-                contentType: file.mimetype
-            });
-
-            const response = await axios.post(
-                `${this.aiServiceUrl}/ai/verify/complete`,
-                formData,
-                {
-                    headers: {
-                        ...formData.getHeaders(),
-                    },
-                    timeout: this.timeout
-                }
-            );
+            const response = await this.postMultipart('/ai/verify/complete', file, extraFields);
 
             return {
                 success: true,
-                verification_status: response.data.verification_status || 'pending',
-                confidence_score: response.data.confidence_score || 0,
-                ocr_results: response.data.ocr_results || {},
-                tampering_results: response.data.tampering_results || {},
-                template_results: response.data.template_results || {},
-                anomaly_results: response.data.anomaly_results || {},
-                recommendations: response.data.recommendations || [],
-                processing_time: response.data.processing_time || 0
+                verification_status: response.verification_status || 'pending',
+                confidence_score: response.confidence_score || 0,
+                ocr_results: response.ocr_results || {},
+                tampering_results: response.tampering_results || {},
+                template_results: response.template_results || {},
+                anomaly_results: response.anomaly_results || {},
+                orchestration_results: response.orchestration_results || null,
+                recommendations: response.recommendations || [],
+                processing_time: response.processing_time || 0
             };
 
         } catch (error) {
@@ -230,7 +273,7 @@ class AIService {
                 success: false,
                 verification_status: 'error',
                 confidence_score: 0,
-                error: error.message
+                error: extractServiceErrorMessage(error, 'Complete verification failed')
             };
         }
     }
@@ -248,7 +291,9 @@ class AIService {
 
             return {
                 success: true,
-                status: 'healthy',
+                status: response.data.status || 'healthy',
+                service: response.data.service || 'unknown',
+                uptime_seconds: response.data.uptime_seconds || 0,
                 response_time: response.data.response_time || 0,
                 version: response.data.version || 'unknown'
             };
@@ -258,7 +303,7 @@ class AIService {
             return {
                 success: false,
                 status: 'unhealthy',
-                error: error.message
+                error: extractServiceErrorMessage(error, 'AI service health check failed')
             };
         }
     }
@@ -276,7 +321,8 @@ class AIService {
 
             return {
                 success: true,
-                statistics: response.data || {}
+                uptime_seconds: response.data.uptime_seconds || 0,
+                statistics: response.data.statistics || response.data || {}
             };
 
         } catch (error) {
@@ -284,7 +330,7 @@ class AIService {
             return {
                 success: false,
                 statistics: {},
-                error: error.message
+                error: extractServiceErrorMessage(error, 'Failed to get AI service statistics')
             };
         }
     }
@@ -330,7 +376,7 @@ class AIService {
                 } catch (error) {
                     errors.push({
                         fileName: files[i].originalname,
-                        error: error.message
+                        error: extractServiceErrorMessage(error, 'Batch operation failed')
                     });
                 }
             }
@@ -350,7 +396,7 @@ class AIService {
                 processed: 0,
                 errors: files.length,
                 results: [],
-                errors: [{ error: error.message }]
+                errors: [{ error: extractServiceErrorMessage(error, 'Batch processing failed') }]
             };
         }
     }

@@ -4,7 +4,7 @@
 
 - Base URL: http://localhost:5000/api
 - Auth: send Authorization: Bearer <jwt> on every private endpoint.
-- Roles in backend: admin, institution_admin, university_admin, company_admin, verifier, user.
+- Roles in backend: admin, institution_admin, university_admin, company_admin.
 - Uploads use multipart/form-data; single file field is certificate, bulk file field is certificates; max file size is 10MB; allowed types are pdf, jpg, jpeg, png, tiff, tif.
 - Main certificate statuses: verified, suspicious, fake, pending.
 - Paginated list responses generally return {..., total, currentPage, totalPages}.
@@ -25,7 +25,7 @@
 
 **Access Profiles**
 
-- Types are institution-admins, university-admins, company-admins, verifiers.
+- Types are institution-admins, university-admins, company-admins.
 - For every type, these routes exist: GET /access/:type/me, GET /access/:type, POST /access/:type, GET /access/:type/:id, PUT /access/:type/:id, DELETE /access/:type/:id.
 - GET /access/:type / POST / PUT / DELETE are admin only.
 - GET /access/:type/me is for the logged-in owner of that role or admin.
@@ -33,7 +33,6 @@
 - institution-admins: userId, institutionId required; optional adminCode, department, title, canIssueCertificates, permissions, isActive.
 - university-admins: userId, institutionId required; optional adminCode, department, title, permissions, canApproveInstitutionAdmins, isActive.
 - company-admins: userId, companyName required; optional companyCode, institutionIds, accessScope, permissions, isActive.
-- verifiers: userId required; optional organizationName, verifierType, assignedInstitutionIds, accessLevel, lastVerifiedAt, isActive.
 - Important: creating an access profile is what syncs the base user into role-specific access.
 
 **Institutions**
@@ -63,14 +62,14 @@
 - For institution/university admins, institutionId can be omitted and is taken from the token.
 - Response from POST /certificates/verify: { message, certificate: { id, certificateId, certificateHash, status } }.
 - POST /certificates/bulk same roles; multipart/form-data; files under certificates; text field records must be a JSON array matching file order 1:1.
-- POST /certificates/validate roles admin|institution_admin|university_admin|company_admin|verifier; file field certificate is optional; body uses the same certificate shape except institutionId is not required; response: { success, isMatch, verificationStatus, matchType, message, candidateCertificate, trustedCertificate }.
+- POST /certificates/validate roles admin|institution_admin|university_admin|company_admin; file field certificate is optional; body uses the same certificate shape except institutionId is not required; response: { success, isMatch, verificationStatus, matchType, message, candidateCertificate, trustedCertificate }.
 - GET /certificates private; query: page, limit, sortBy, sortOrder, status, institutionId, studentName, rollNumber, certificateId, certificateHash, dateFrom, dateTo.
 - GET /certificates/:id private; accepts Mongo \_id or certificateId.
-- PUT /certificates/:id/verify roles admin|verifier|company_admin; body: { status, reason?, verificationMethod?, verificationResults? }; response: { message, certificate }.
+- PUT /certificates/:id/verify roles admin|company_admin; body: { status, reason?, verificationMethod?, verificationResults? }; response: { message, certificate }.
 
 **Verification Logs**
 
-- GET /verification-logs roles admin|verifier|company_admin|institution_admin|university_admin; query: page, limit, certificateId, verifiedBy, institutionId, result, verificationMethod.
+- GET /verification-logs roles admin|company_admin|institution_admin|university_admin; query: page, limit, certificateId, verifiedBy, institutionId, result, verificationMethod.
 - GET /verification-logs/:id same roles.
 
 **Dashboard**
@@ -90,7 +89,7 @@
 1. Public user flow: register/login -> store JWT -> call GET /auth/me.
 2. Admin setup flow: create institution -> create base user -> create role profile under /access/:type.
 3. Institution/university flow: upload trusted certs via /certificates/verify or /certificates/bulk -> list/view via /certificates.
-4. Company/verifier flow: validate candidate document via /certificates/validate -> if needed manually override via /certificates/:id/verify -> inspect /verification-logs.
+4. Company review flow: validate candidate document via /certificates/validate -> if needed manually override via /certificates/:id/verify -> inspect /verification-logs.
 5. Admin ops flow: use /users, /institutions, /access/_, /dashboard/_.
 
 **Important Caveats**

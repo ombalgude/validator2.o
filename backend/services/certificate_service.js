@@ -18,8 +18,8 @@ const {
 const { buildInstitutionScopedFilter, canUserAccessInstitution } = require('../utils/institutionScope');
 
 const ALLOWED_UPLOAD_ROLES = new Set(['admin', 'institution_admin', 'university_admin']);
-const ALLOWED_VERIFY_ROLES = new Set(['admin', 'verifier', 'company_admin']);
-const ALLOWED_COMPARE_ROLES = new Set(['admin', 'institution_admin', 'university_admin', 'company_admin', 'verifier']);
+const ALLOWED_VERIFY_ROLES = new Set(['admin', 'company_admin']);
+const ALLOWED_COMPARE_ROLES = new Set(['admin', 'institution_admin', 'university_admin', 'company_admin']);
 const VALID_STATUSES = new Set(['verified', 'suspicious', 'fake', 'pending']);
 
 const VERIFY_METHODS = {
@@ -59,16 +59,23 @@ class CertificateService {
   }
 
   async createTrustedCertificate(file, user, input, options = {}) {
-    const { certificate } = await this.storeTrustedCertificateRecord({
+    const { certificate, fileBuffer } = await this.storeTrustedCertificateRecord({
       file,
       user,
       input,
       sourceType: options.sourceType || 'manual_upload',
     });
 
+    let verificationResults = null;
+    if (options.verifyWithAI !== false) {
+      verificationResults = await this.applyAiVerification(certificate, file, fileBuffer);
+    }
+
     return {
       message: 'Certificate uploaded successfully',
       certificate: buildCertificateSummary(certificate),
+      verificationStatus: certificate.verificationStatus,
+      verificationResults,
     };
   }
 
@@ -300,25 +307,49 @@ class CertificateService {
 
   async performAIVerification(file) {
     try {
+      const startTime = Date.now();
+      const aiContext = {
+        document_type: 'certificate',
+      };
+      const completeResult = await this.aiService.completeVerification(file, aiContext);
+
+      if (completeResult?.success && completeResult.verification_status !== 'error') {
+        return this.normalizeCompleteVerificationResult(completeResult);
+      }
+
       const results = {
         ocrConfidence: 0,
         tamperScore: 0,
         databaseMatch: false,
         anomalyScore: 0,
         processingTime: 0,
-        errors: [],
+        errors: completeResult?.error ? [completeResult.error] : [],
+        recommendations: [],
+        orchestrator: null,
       };
 
-      const startTime = Date.now();
-
       try {
-        const ocrResult = await this.aiService.extractText(file);
+        const ocrResult = await this.aiService.extractText(file, aiContext);
         results.ocrConfidence = ocrResult.confidence || 0;
         results.extractedText = ocrResult.text || '';
+        results.orchestrator = ocrResult.validation_results
+          ? {
+              validation_results: ocrResult.validation_results,
+              integration_requirements: ocrResult.integration_requirements || [],
+              ledger_update: ocrResult.ledger_update || [],
+            }
+          : null;
+        results.recommendations = (ocrResult.integration_requirements || [])
+          .map((requirement) => requirement.reason)
+          .filter(Boolean);
 
         const tamperResult = await this.aiService.detectTampering(file);
         results.tamperScore = tamperResult.tampering_score || 0;
         results.tamperingDetected = tamperResult.tampering_detected || false;
+        results.recommendations = [
+          ...results.recommendations,
+          ...(tamperResult.recommendations || []),
+        ];
 
         const templateResult = await this.aiService.matchTemplate(file);
         results.templateMatch = templateResult.match_score || 0;
@@ -333,6 +364,7 @@ class CertificateService {
       }
 
       results.processingTime = Date.now() - startTime;
+      results.recommendations = [...new Set(results.recommendations)];
       return results;
     } catch (error) {
       console.error('Error in performAIVerification:', error);
@@ -343,8 +375,33 @@ class CertificateService {
         anomalyScore: 100,
         processingTime: 0,
         errors: [error.message],
+        recommendations: [],
+        orchestrator: null,
       };
     }
+  }
+
+  normalizeCompleteVerificationResult(completeResult) {
+    const orchestration =
+      completeResult.orchestration_results ||
+      completeResult.ocr_results?.orchestration ||
+      null;
+
+    return {
+      ocrConfidence: completeResult.ocr_results?.confidence || 0,
+      tamperScore: completeResult.tampering_results?.confidence_score || 0,
+      databaseMatch: false,
+      anomalyScore: completeResult.anomaly_results?.anomaly_score || 0,
+      processingTime: completeResult.processing_time || 0,
+      errors: completeResult.error ? [completeResult.error] : [],
+      tamperingDetected: completeResult.tampering_results?.tampering_detected || false,
+      templateMatch: completeResult.template_results?.match_score || 0,
+      templateId: completeResult.template_results?.template_id || '',
+      anomalies: completeResult.anomaly_results?.anomalies || [],
+      extractedText: completeResult.ocr_results?.text || '',
+      recommendations: completeResult.recommendations || [],
+      orchestrator: orchestration,
+    };
   }
 
   generateCertificateId() {
@@ -639,7 +696,7 @@ class CertificateService {
         userAgent: details.userAgent || '',
         verificationMethod: details.verificationMethod || VERIFY_METHODS.SYSTEM,
         certificateHash: certificate.certificateHash,
-        verifierRole: user.role || '',
+        actorRole: user.role || '',
         details,
       });
 

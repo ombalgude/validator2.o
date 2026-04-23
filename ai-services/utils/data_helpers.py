@@ -11,18 +11,111 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+def _extract_by_label_proximity(lines: List[str]) -> Dict[str, Optional[str]]:
+    """
+    Context-aware field extraction.
+    Looks for known label keywords, then grabs the value on the same line
+    (after the colon/dash) or on the next non-empty line.
+    Much more robust than full-text regex for real certificate layouts.
+    """
+    LABEL_MAP = {
+        "student_name": [
+            "name", "student name", "candidate name", "student's name",
+            "this is to certify that", "certify that",
+        ],
+        "roll_number": [
+            "roll no", "roll number", "reg no", "registration no",
+            "student id", "enrollment no", "enroll no", "id no",
+        ],
+        "institution_name": [
+            "university", "college", "institute", "institution", "school",
+        ],
+        "course": [
+            "course", "programme", "program", "stream",
+        ],
+        "degree": [
+            "degree", "bachelor", "master", "diploma", "certificate of",
+            "b.tech", "b.e.", "m.tech", "m.e.", "b.sc", "m.sc", "phd",
+        ],
+        "issue_date": [
+            "date", "issued on", "dated", "date of issue",
+        ],
+        "grade": [
+            "grade", "gpa", "cgpa", "sgpa", "percentage", "marks", "result",
+            "division", "class",
+        ],
+    }
+
+    extracted: Dict[str, Optional[str]] = {k: None for k in LABEL_MAP}
+
+    def _value_after_label(line: str, label: str) -> Optional[str]:
+        """Return text after label + optional separator on the same line."""
+        pattern = re.compile(
+            r"(?i)" + re.escape(label) + r"\s*[:\-\u2013\u2014]?\s*(.+)"
+        )
+        match = pattern.search(line)
+        if match:
+            val = match.group(1).strip().strip(".")
+            return val if len(val) >= 2 else None
+        return None
+
+    for i, line in enumerate(lines):
+        line_lower = line.lower()
+        for field, labels in LABEL_MAP.items():
+            if extracted[field]:
+                continue
+            for label in labels:
+                if label in line_lower:
+                    # Try value on the same line
+                    value = _value_after_label(line, label)
+                    if not value:
+                        # Try the next non-empty line
+                        for j in range(i + 1, min(i + 3, len(lines))):
+                            if lines[j].strip():
+                                value = lines[j].strip().strip(".")
+                                break
+                    if value and len(value) >= 2:
+                        extracted[field] = value
+                    break
+
+    return extracted
+
+
+def _merge_extractions(
+    label_data: Dict[str, Optional[str]],
+    regex_data: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Merge label-proximity results (higher confidence) with
+    regex results (fallback for fields label-proximity missed).
+    """
+    merged = dict(regex_data)  # start with regex as base
+    for field, value in label_data.items():
+        if value:  # label-proximity wins when it found something
+            merged[field] = value
+    return merged
+
 def extract_certificate_data(ocr_text: str) -> Dict[str, Any]:
     """
-    Extract structured data from OCR text
-    
+    Extract structured data from OCR text.
+    Uses label-proximity parsing first, falls back to regex for missed fields.
+
     Args:
         ocr_text: Raw OCR extracted text
-        
+
     Returns:
         Dictionary with extracted certificate data
     """
     try:
-        data = {
+        lines = [l.strip() for l in (ocr_text or "").splitlines() if l.strip()]
+
+        # 1. Label-proximity extraction (context-aware)
+        label_data = _extract_by_label_proximity(lines)
+
+        # 2. Regex extraction (existing logic, used as fallback)
+        cleaned_text = _clean_text(ocr_text)
+        regex_data: Dict[str, Any] = {
             "student_name": None,
             "roll_number": None,
             "institution_name": None,
@@ -31,62 +124,50 @@ def extract_certificate_data(ocr_text: str) -> Dict[str, Any]:
             "issue_date": None,
             "grades": {},
             "confidence": 0.0,
-            "extracted_fields": []
+            "extracted_fields": [],
         }
-        
-        # Clean and normalize text
-        cleaned_text = _clean_text(ocr_text)
-        
-        # Extract student name
+
         name = _extract_student_name(cleaned_text)
-        if name:
-            data["student_name"] = name
-            data["extracted_fields"].append("student_name")
-        
-        # Extract roll number
+        if name: regex_data["student_name"] = name
+
         roll = _extract_roll_number(cleaned_text)
-        if roll:
-            data["roll_number"] = roll
-            data["extracted_fields"].append("roll_number")
-        
-        # Extract institution name
+        if roll: regex_data["roll_number"] = roll
+
         institution = _extract_institution_name(cleaned_text)
-        if institution:
-            data["institution_name"] = institution
-            data["extracted_fields"].append("institution_name")
-        
-        # Extract course information
+        if institution: regex_data["institution_name"] = institution
+
         course = _extract_course_info(cleaned_text)
-        if course:
-            data["course"] = course
-            data["extracted_fields"].append("course")
-        
-        # Extract degree information
+        if course: regex_data["course"] = course
+
         degree = _extract_degree_info(cleaned_text)
-        if degree:
-            data["degree"] = degree
-            data["extracted_fields"].append("degree")
-        
-        # Extract issue date
+        if degree: regex_data["degree"] = degree
+
         date = _extract_issue_date(cleaned_text)
-        if date:
-            data["issue_date"] = date
-            data["extracted_fields"].append("issue_date")
-        
-        # Extract grades
+        if date: regex_data["issue_date"] = date
+
         grades = _extract_grades(cleaned_text)
-        if grades:
-            data["grades"] = grades
-            data["extracted_fields"].append("grades")
-        
-        # Calculate confidence based on extracted fields
-        data["confidence"] = len(data["extracted_fields"]) / 7.0
-        
-        return data
-        
+        if grades: regex_data["grades"] = grades
+
+        # 3. Merge — label-proximity wins, regex fills gaps
+        merged = _merge_extractions(label_data, regex_data)
+
+        # 4. Recompute extracted_fields and confidence
+        key_fields = ["student_name", "roll_number", "institution_name", "course", "degree"]
+        merged["extracted_fields"] = [f for f in key_fields if merged.get(f)]
+        merged["confidence"] = round(
+            (len(merged["extracted_fields"]) / len(key_fields)) * 100, 2
+        )
+
+        return merged
+
     except Exception as e:
-        logger.error(f"Error extracting certificate data: {str(e)}")
-        return {"error": str(e)}
+        logger.error(f"Error extracting certificate data: {e}")
+        return {
+            "student_name": None, "roll_number": None, "institution_name": None,
+            "course": None, "degree": None, "issue_date": None,
+            "grades": {}, "confidence": 0.0, "extracted_fields": [],
+        }
+
 
 def validate_certificate_format(data: Dict[str, Any]) -> Dict[str, Any]:
     """
