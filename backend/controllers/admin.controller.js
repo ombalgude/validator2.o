@@ -71,11 +71,3 @@ const revokeDocument = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
-<<<<<<< HEAD
-
-module.exports = {
-    addDocument,
-    revokeDocument
-};
-=======
->>>>>>> 95f0fbbcfbc1d1dbca177a972cbcd8e93cc1f4fe
