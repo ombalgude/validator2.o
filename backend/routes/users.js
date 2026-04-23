@@ -18,7 +18,7 @@ const ADMIN_ALLOWED_FIELDS = new Set([
 ]);
 
 const SELF_ALLOWED_FIELDS = new Set(['fullName', 'companyName']);
-const VALID_ROLES = ['admin', 'institution_admin', 'university_admin', 'company_admin', 'verifier', 'user'];
+const VALID_ROLES = ['admin', 'institution_admin', 'university_admin', 'company_admin', 'user'];
 
 const parseBoolean = (value) => {
   if (typeof value === 'boolean') {

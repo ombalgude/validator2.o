@@ -1,6 +1,5 @@
 const Institution = require('../models/Institution');
 const CompanyAdmin = require('../models/company_admin');
-const Verifier = require('../models/Verifier');
 
 const normalizeInstitutionId = (value) => {
   if (!value) {
@@ -69,20 +68,6 @@ const getAccessibleInstitutionIds = async (user) => {
     }
 
     return normalizeInstitutionIds(companyAdminProfile.institutionIds || []);
-  }
-
-  if (user.role === 'verifier') {
-    const verifierProfile = await Verifier.findOne({ userId: user._id, isActive: true }).lean();
-
-    if (!verifierProfile) {
-      return [];
-    }
-
-    if (verifierProfile.verifierType === 'internal') {
-      return null;
-    }
-
-    return normalizeInstitutionIds(verifierProfile.assignedInstitutionIds || []);
   }
 
   return [];

@@ -18,8 +18,8 @@ const {
 const { buildInstitutionScopedFilter, canUserAccessInstitution } = require('../utils/institutionScope');
 
 const ALLOWED_UPLOAD_ROLES = new Set(['admin', 'institution_admin', 'university_admin']);
-const ALLOWED_VERIFY_ROLES = new Set(['admin', 'verifier', 'company_admin']);
-const ALLOWED_COMPARE_ROLES = new Set(['admin', 'institution_admin', 'university_admin', 'company_admin', 'verifier']);
+const ALLOWED_VERIFY_ROLES = new Set(['admin', 'company_admin']);
+const ALLOWED_COMPARE_ROLES = new Set(['admin', 'institution_admin', 'university_admin', 'company_admin']);
 const VALID_STATUSES = new Set(['verified', 'suspicious', 'fake', 'pending']);
 
 const VERIFY_METHODS = {
@@ -696,7 +696,7 @@ class CertificateService {
         userAgent: details.userAgent || '',
         verificationMethod: details.verificationMethod || VERIFY_METHODS.SYSTEM,
         certificateHash: certificate.certificateHash,
-        verifierRole: user.role || '',
+        actorRole: user.role || '',
         details,
       });
 

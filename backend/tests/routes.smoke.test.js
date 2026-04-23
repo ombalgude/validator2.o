@@ -5,7 +5,7 @@ const { createApp } = require('../server');
 
 const SAMPLE_ID = '507f1f77bcf86cd799439011';
 const SAMPLE_CERTIFICATE_ID = 'CERT-123';
-const ACCESS_TYPES = ['institution-admins', 'university-admins', 'company-admins', 'verifiers'];
+const ACCESS_TYPES = ['institution-admins', 'university-admins', 'company-admins'];
 
 const PUBLIC_ROUTE_CHECKS = [
   { method: 'POST', path: '/api/auth/register', body: {}, expectedStatus: 400, expectedMessage: 'Validation failed' },

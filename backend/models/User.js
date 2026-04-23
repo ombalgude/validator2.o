@@ -5,7 +5,6 @@ const ROLE_PERMISSIONS = {
   institution_admin: ['upload_certificates', 'view_own_certificates', 'manage_institution_users'],
   university_admin: ['upload_certificates', 'view_own_certificates', 'manage_university_records'],
   company_admin: ['verify_certificates', 'view_verification_logs'],
-  verifier: ['verify_certificates', 'view_certificates'],
   user: ['view_profile'],
 };
 

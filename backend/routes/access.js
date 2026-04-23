@@ -5,7 +5,6 @@ const Institution = require('../models/Institution');
 const InstitutionAdmin = require('../models/Institution_admin');
 const UniversityAdmin = require('../models/univercity_admin');
 const CompanyAdmin = require('../models/company_admin');
-const Verifier = require('../models/Verifier');
 const { auth, authorize } = require('../middleware/auth');
 const { applyUserAccessProfile, clearUserAccessState } = require('../utils/userAccessProfile');
 
@@ -60,26 +59,11 @@ const PROFILE_CONFIG = {
       user.companyName = profile.companyName;
     },
   },
-  verifiers: {
-    label: 'Verifier',
-    role: 'verifier',
-    model: Verifier,
-    allowedFields: ['userId', 'organizationName', 'verifierType', 'assignedInstitutionIds', 'accessLevel', 'lastVerifiedAt', 'isActive'],
-    requiredFields: ['userId'],
-    institutionArrayField: 'assignedInstitutionIds',
-    populate: [
-      { path: 'userId', select: 'email fullName role institutionId companyName isActive permissions' },
-      { path: 'assignedInstitutionIds', select: 'name code institutionType isVerified' },
-    ],
-    syncUser: (user) => {
-      user.role = 'verifier';
-    },
-  },
 };
 
 const BOOLEAN_FIELDS = new Set(['canIssueCertificates', 'canApproveInstitutionAdmins', 'isActive']);
-const DATE_FIELDS = new Set(['lastVerifiedAt']);
-const ARRAY_ID_FIELDS = new Set(['institutionIds', 'assignedInstitutionIds']);
+const DATE_FIELDS = new Set();
+const ARRAY_ID_FIELDS = new Set(['institutionIds']);
 const ARRAY_STRING_FIELDS = new Set(['permissions']);
 const SINGLE_ID_FIELDS = new Set(['userId', 'institutionId']);
 
@@ -222,10 +206,6 @@ const buildListFilter = (config, query) => {
 
   if (query.companyName && config.allowedFields.includes('companyName')) {
     filter.companyName = { $regex: query.companyName, $options: 'i' };
-  }
-
-  if (query.verifierType && config.allowedFields.includes('verifierType')) {
-    filter.verifierType = query.verifierType;
   }
 
   if (query.accessScope && config.allowedFields.includes('accessScope')) {

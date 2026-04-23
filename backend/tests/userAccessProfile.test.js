@@ -47,7 +47,7 @@ describe('userAccessProfile helpers', () => {
 
   test('inactive profiles leave the user as a plain user', () => {
     const user = {
-      role: 'verifier',
+      role: 'institution_admin',
       institutionId: 'inst-1',
       companyName: 'Legacy',
     };

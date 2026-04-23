@@ -56,7 +56,7 @@ const VerificationLogSchema = new mongoose.Schema(
       default: null,
       match: HASH_REGEX,
     },
-    verifierRole: {
+    actorRole: {
       type: String,
       trim: true,
       maxlength: 40,
