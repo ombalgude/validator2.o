@@ -6,6 +6,7 @@ const { validateUserRegistration, validateUserLogin } = require('../middleware/v
 const { auth } = require('../middleware/auth');
 
 const router = express.Router();
+const SELF_SIGNUP_ROLES = new Set(['institution_admin', 'university_admin', 'company_admin']);
 
 const buildAuthResponse = (user, token, message) => ({
   message,
@@ -32,6 +33,8 @@ router.post('/register', validateUserRegistration, async (req, res) => {
     const email = String(req.body.email || '').trim().toLowerCase();
     const password = String(req.body.password || '');
     const fullName = typeof req.body.fullName === 'string' ? req.body.fullName.trim() : '';
+    const requestedRole = String(req.body.role || 'company_admin').trim();
+    const role = SELF_SIGNUP_ROLES.has(requestedRole) ? requestedRole : 'company_admin';
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -48,7 +51,7 @@ router.post('/register', validateUserRegistration, async (req, res) => {
       email,
       password: hashedPassword,
       fullName,
-      role: 'user',
+      role,
     });
 
     await user.save();

@@ -13,20 +13,25 @@ import {
 } from "lucide-react";
 import { ParticleCanvas } from "../components/ParticalCanvas";
 import useAuth from "../hooks/useAuth";
-import { getDefaultRouteForRole } from "../lib/roles";
+import { getDefaultRouteForRole, SIGNUP_ROLE_OPTIONS } from "../lib/roles";
 
 function getErrorMessage(error, fallback) {
 	return error?.response?.data?.message || error?.message || fallback;
 }
 
 export default function RegisterInstitution() {
+	const organizationRoleOptions = SIGNUP_ROLE_OPTIONS;
 	const [fullName, setFullName] = useState("");
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
+	const [role, setRole] = useState("institution_admin");
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
 	const navigate = useNavigate();
 	const { register } = useAuth();
+	const selectedRole =
+		organizationRoleOptions.find((option) => option.value === role) ||
+		organizationRoleOptions[0];
 
 	async function submit(event) {
 		event.preventDefault();
@@ -38,9 +43,12 @@ export default function RegisterInstitution() {
 				fullName: fullName.trim(),
 				email: email.trim(),
 				password,
+				role,
 			});
 
-			navigate(getDefaultRouteForRole(currentUser?.role), { replace: true });
+			navigate(getDefaultRouteForRole(currentUser?.role, currentUser), {
+				replace: true,
+			});
 		} catch (requestError) {
 			setError(getErrorMessage(requestError, "Registration failed."));
 		} finally {
@@ -67,11 +75,11 @@ export default function RegisterInstitution() {
 							ValidX
 						</div>
 						<h2 className="text-2xl font-bold text-white">
-							Register for Institution Access
+							Register for Organization Access
 						</h2>
 						<p className="text-gray-400 mt-2">
-							This page creates a normal user account only. An admin must still
-							assign your institution or university access profile later.
+							Choose an admin role now. Institution, university, or company
+							scope becomes active after the matching access profile is assigned.
 						</p>
 					</div>
 
@@ -79,8 +87,8 @@ export default function RegisterInstitution() {
 						<div className="flex items-start gap-3">
 							<CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-indigo-300" />
 							<span>
-								Use this to get into the system quickly. Trusted certificate
-								upload permissions only appear after backend role assignment.
+								Signups now store your requested admin role immediately, but the
+								organization profile still controls which records you can act on.
 							</span>
 						</div>
 					</div>
@@ -104,14 +112,14 @@ export default function RegisterInstitution() {
 
 						<div>
 							<label className="block mb-1 text-sm font-medium text-gray-300">
-								Institution Email
+								Organization Email
 							</label>
 							<div className="relative">
 								<Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
 								<input
 									className="w-full pl-10 pr-3 py-2.5 border border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors placeholder-gray-500"
 									type="email"
-									placeholder="admin@university.edu"
+									placeholder="admin@organization.com"
 									value={email}
 									onChange={(event) => setEmail(event.target.value)}
 									required
@@ -137,6 +145,30 @@ export default function RegisterInstitution() {
 							</div>
 						</div>
 
+						<div>
+							<label className="block mb-1 text-sm font-medium text-gray-300">
+								Admin Role
+							</label>
+							<select
+								className="w-full rounded-lg border border-gray-600 bg-transparent px-3 py-2.5 text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+								value={role}
+								onChange={(event) => setRole(event.target.value)}
+							>
+								{organizationRoleOptions.map((option) => (
+									<option
+										key={option.value}
+										value={option.value}
+										className="bg-slate-900 text-white"
+									>
+										{option.label}
+									</option>
+								))}
+							</select>
+							<p className="mt-2 text-sm text-gray-400">
+								{selectedRole?.description}
+							</p>
+						</div>
+
 						{error ? (
 							<div className="flex items-center gap-3 bg-rose-900/50 text-rose-300 text-sm p-3 rounded-lg border border-rose-500/30">
 								<AlertTriangle className="w-5 h-5" />
@@ -150,7 +182,7 @@ export default function RegisterInstitution() {
 							disabled={loading}
 						>
 							{loading ? <Loader className="animate-spin" /> : <UserPlus className="w-6 h-6" />}
-							<span>{loading ? "Creating account..." : "Create Institution Account"}</span>
+							<span>{loading ? "Creating account..." : "Create Organization Account"}</span>
 						</Button>
 
 						<p className="text-sm text-center text-gray-400">

@@ -12,7 +12,7 @@ import {
 	UserPlus,
 } from "lucide-react";
 import useAuth from "../hooks/useAuth";
-import { getDefaultRouteForRole } from "../lib/roles";
+import { getDefaultRouteForRole, SIGNUP_ROLE_OPTIONS } from "../lib/roles";
 
 function getErrorMessage(error, fallback) {
 	return error?.response?.data?.message || error?.message || fallback;
@@ -22,10 +22,14 @@ export default function RegisterUser() {
 	const [fullName, setFullName] = useState("");
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
+	const [role, setRole] = useState("company_admin");
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
 	const navigate = useNavigate();
 	const { register } = useAuth();
+	const selectedRole =
+		SIGNUP_ROLE_OPTIONS.find((option) => option.value === role) ||
+		SIGNUP_ROLE_OPTIONS[0];
 
 	async function submit(event) {
 		event.preventDefault();
@@ -37,9 +41,12 @@ export default function RegisterUser() {
 				fullName: fullName.trim(),
 				email: email.trim(),
 				password,
+				role,
 			});
 
-			navigate(getDefaultRouteForRole(currentUser?.role), { replace: true });
+			navigate(getDefaultRouteForRole(currentUser?.role, currentUser), {
+				replace: true,
+			});
 		} catch (requestError) {
 			setError(getErrorMessage(requestError, "Registration failed."));
 		} finally {
@@ -59,8 +66,8 @@ export default function RegisterUser() {
 						</div>
 						<h2 className="text-2xl font-bold text-white">Create Your Account</h2>
 						<p className="text-gray-400 mt-2">
-							Your registration creates a normal user account and signs you in
-							immediately.
+							Choose the workspace role you want at signup. Organization-specific
+							scope becomes active after the related backend access profile is assigned.
 						</p>
 					</div>
 
@@ -114,6 +121,30 @@ export default function RegisterUser() {
 									minLength={8}
 								/>
 							</div>
+						</div>
+
+						<div>
+							<label className="block mb-1 text-sm font-medium text-gray-300">
+								Signup Role
+							</label>
+							<select
+								className="w-full rounded-lg border border-gray-600 bg-transparent px-3 py-2.5 text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+								value={role}
+								onChange={(event) => setRole(event.target.value)}
+							>
+								{SIGNUP_ROLE_OPTIONS.map((option) => (
+									<option
+										key={option.value}
+										value={option.value}
+										className="bg-slate-900 text-white"
+									>
+										{option.label}
+									</option>
+								))}
+							</select>
+							<p className="mt-2 text-sm text-gray-400">
+								{selectedRole?.description}
+							</p>
 						</div>
 
 						{error ? (

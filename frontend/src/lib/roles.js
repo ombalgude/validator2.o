@@ -9,24 +9,43 @@ export const CANDIDATE_VALIDATION_ROLES = [
 	"institution_admin",
 	"university_admin",
 	"company_admin",
-	"verifier",
 ];
 
 export const MANUAL_STATUS_UPDATE_ROLES = [
 	"admin",
-	"verifier",
 	"company_admin",
 ];
 
-export function getDefaultRouteForRole(role) {
+export const SIGNUP_ROLE_OPTIONS = [
+	{
+		value: "institution_admin",
+		label: "Institution Admin",
+		description: "Trusted upload access activates after institution assignment.",
+	},
+	{
+		value: "university_admin",
+		label: "University Admin",
+		description: "University upload access activates after institution assignment.",
+	},
+	{
+		value: "company_admin",
+		label: "Company Admin",
+		description: "Validation and review access activates after company assignment.",
+	},
+];
+
+function hasInstitutionScope(user) {
+	return Boolean(user?.institution?.id || user?.institutionId);
+}
+
+export function getDefaultRouteForRole(role, user = null) {
 	switch (role) {
 		case "admin":
 			return "/dashboard";
 		case "institution_admin":
 		case "university_admin":
-			return "/upload";
+			return hasInstitutionScope(user) ? "/upload" : "/certificates";
 		case "company_admin":
-		case "verifier":
 		case "user":
 		default:
 			return "/certificates";

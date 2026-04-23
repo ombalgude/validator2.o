@@ -18,8 +18,8 @@ const certificateService = new CertificateService();
 const DEFAULT_LIST_LIMIT = 10;
 const MAX_LIST_LIMIT = 100;
 const TRUSTED_UPLOAD_ROLES = ['admin', 'institution_admin', 'university_admin'];
-const VALIDATION_ROLES = ['admin', 'institution_admin', 'university_admin', 'company_admin', 'verifier'];
-const MANUAL_VERIFY_ROLES = ['admin', 'verifier', 'company_admin'];
+const VALIDATION_ROLES = ['admin', 'institution_admin', 'university_admin', 'company_admin'];
+const MANUAL_VERIFY_ROLES = ['admin', 'company_admin'];
 
 const resolveCertificateQuery = (identifier) => {
   const trimmedIdentifier = String(identifier || '').trim();

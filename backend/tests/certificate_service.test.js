@@ -2,13 +2,11 @@ const assert = require('node:assert/strict');
 const { afterEach, describe, test } = require('node:test');
 const Certificate = require('../models/Certificate');
 const CompanyAdmin = require('../models/company_admin');
-const Verifier = require('../models/Verifier');
 const CertificateService = require('../services/certificate_service');
 const { computeCertificateHash } = require('../utils/certificatePayload');
 
 const originalCertificateFindOne = Certificate.findOne;
 const originalCompanyAdminFindOne = CompanyAdmin.findOne;
-const originalVerifierFindOne = Verifier.findOne;
 
 const createService = () => new CertificateService({
   aiService: {
@@ -44,7 +42,6 @@ const createService = () => new CertificateService({
 afterEach(() => {
   Certificate.findOne = originalCertificateFindOne;
   CompanyAdmin.findOne = originalCompanyAdminFindOne;
-  Verifier.findOne = originalVerifierFindOne;
 });
 
 const SAMPLE_CERTIFICATE_INPUT = {
@@ -124,23 +121,6 @@ describe('CertificateService', () => {
       institutionId: { $in: ['inst-2'] },
       certificateId: 'CERT-123',
     });
-  });
-
-  test('external verifiers cannot access certificates outside their assigned institutions', async () => {
-    Verifier.findOne = () => ({
-      lean: async () => ({
-        verifierType: 'external',
-        assignedInstitutionIds: ['inst-1'],
-      }),
-    });
-
-    const service = createService();
-    const canAccess = await service.canAccessCertificate(
-      { institutionId: 'inst-2' },
-      { _id: 'user-1', role: 'verifier' }
-    );
-
-    assert.equal(canAccess, false);
   });
 
   test('institution-level upload permissions stay limited to the user institution', () => {

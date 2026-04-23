@@ -35,7 +35,7 @@ const buildLogFilter = async (query, user) => {
 
 const canAccessLog = (log, user) => canUserAccessInstitution(user, log.institutionId?._id || log.institutionId);
 
-router.get('/', auth, authorize('admin', 'verifier', 'company_admin', 'institution_admin', 'university_admin'), async (req, res) => {
+router.get('/', auth, authorize('admin', 'company_admin', 'institution_admin', 'university_admin'), async (req, res) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseLimit(req.query.limit);
@@ -63,7 +63,7 @@ router.get('/', auth, authorize('admin', 'verifier', 'company_admin', 'instituti
   }
 });
 
-router.get('/:id', auth, authorize('admin', 'verifier', 'company_admin', 'institution_admin', 'university_admin'), async (req, res) => {
+router.get('/:id', auth, authorize('admin', 'company_admin', 'institution_admin', 'university_admin'), async (req, res) => {
   try {
     const log = await VerificationLog.findById(req.params.id)
       .populate('certificateId', 'certificateId studentName verificationStatus certificateHash')
