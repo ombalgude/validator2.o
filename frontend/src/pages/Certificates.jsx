@@ -97,6 +97,7 @@ export default function CertificatesPage() {
 	const [manualSuccess, setManualSuccess] = useState('');
 	const [socketNotice, setSocketNotice] = useState('');
 	const [uploadNotice, setUploadNotice] = useState('');
+	const [newCertificateId, setNewCertificateId] = useState('');
 	const { user, lastStatusUpdate } = useAuth();
 
 	const validationAllowed = canValidateCandidate(user?.role);
@@ -137,14 +138,26 @@ export default function CertificatesPage() {
 			return;
 		}
 
-		const certificateId = location.state.certificateId
-			? ` Certificate ${location.state.certificateId} is available in the list.`
+		const certId = location.state.certificateId || '';
+		const txHash = location.state.blockchainTxHash || '';
+		const blockchainRecorded = location.state.blockchainRecorded || false;
+
+		const certNote = certId
+			? ` Certificate ${certId} is available in the list.`
+			: '';
+		const chainNote = blockchainRecorded && txHash
+			? ` Blockchain TX: ${txHash.slice(0, 18)}…`
 			: '';
 
 		setUploadNotice(
-			`${location.state.message || 'Certificate registered successfully.'}${certificateId}`,
+			`${location.state.message || 'Certificate registered successfully.'}${certNote}${chainNote}`,
 		);
+		setNewCertificateId(certId);
 		navigate(location.pathname, { replace: true, state: {} });
+
+		// Clear highlight after 6 s
+		const timer = setTimeout(() => setNewCertificateId(''), 6000);
+		return () => clearTimeout(timer);
 	}, [location.pathname, location.state, navigate]);
 
 	useEffect(() => {
@@ -588,7 +601,13 @@ export default function CertificatesPage() {
 											certificates.map((certificate) => (
 												<tr
 													key={certificate.id}
-													className="cursor-pointer border-b border-slate-100 hover:bg-slate-50"
+													className={`cursor-pointer border-b border-slate-100 hover:bg-slate-50 transition-colors ${
+														newCertificateId &&
+														(certificate.certificateId === newCertificateId ||
+															certificate.id === newCertificateId)
+															? 'ring-2 ring-inset ring-emerald-400 bg-emerald-50'
+															: ''
+													}`}
 													onClick={() =>
 														loadCertificateDetails(
 															certificate.id || certificate.certificateId,

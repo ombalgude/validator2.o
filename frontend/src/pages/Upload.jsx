@@ -52,6 +52,10 @@ function getUploadedCertificateHash(result) {
 	return result?.certificateHash || result?.certificate?.certificateHash || "";
 }
 
+function getUploadedBlockchainTxHash(result) {
+	return result?.blockchainTxHash || result?.verificationResults?.blockchainTxHash || "";
+}
+
 export default function UploadPage() {
 	const [institutions, setInstitutions] = useState([]);
 	const [institutionsLoading, setInstitutionsLoading] = useState(false);
@@ -384,6 +388,8 @@ export default function UploadPage() {
 					result?.message ||
 					"Certificate uploaded and registered successfully.",
 				certificateId,
+				blockchainRecorded: Boolean(result?.blockchainRecorded),
+				blockchainTxHash: getUploadedBlockchainTxHash(result),
 			},
 		});
 	}
@@ -642,7 +648,7 @@ export default function UploadPage() {
 									"Certificate uploaded and registered successfully."}
 							</span>
 						</div>
-						<div className="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
+						<div className="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-2 xl:grid-cols-4">
 							<div className="rounded-lg bg-white/80 p-3">
 								<p className="text-slate-500">Certificate ID</p>
 								<p className="mt-1 break-words font-semibold text-slate-900">
@@ -651,15 +657,27 @@ export default function UploadPage() {
 							</div>
 							<div className="rounded-lg bg-white/80 p-3">
 								<p className="text-slate-500">Status</p>
-								<p className="mt-1 font-semibold text-slate-900">
+								<p className="mt-1 font-semibold text-slate-900 capitalize">
 									{getUploadedCertificateStatus(result) || "--"}
 								</p>
 							</div>
 							<div className="rounded-lg bg-white/80 p-3">
 								<p className="text-slate-500">Hash</p>
-								<p className="mt-1 break-words font-semibold text-slate-900">
+								<p className="mt-1 break-words font-semibold text-slate-900 text-xs">
 									{getUploadedCertificateHash(result) || "--"}
 								</p>
+							</div>
+							<div className="rounded-lg bg-white/80 p-3">
+								<p className="text-slate-500">Blockchain TX</p>
+								{getUploadedBlockchainTxHash(result) ? (
+									<p className="mt-1 break-words font-semibold text-emerald-700 text-xs">
+										{getUploadedBlockchainTxHash(result)}
+									</p>
+								) : (
+									<span className="mt-1 inline-flex items-center rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">
+										Not recorded
+									</span>
+								)}
 							</div>
 						</div>
 						<div className="mt-4 flex flex-col gap-3 sm:flex-row">
