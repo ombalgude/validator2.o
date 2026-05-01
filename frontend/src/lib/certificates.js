@@ -220,6 +220,12 @@ export function buildTrustedUploadFormData({ file, values }) {
 	return formData;
 }
 
+export function buildCertificateExtractionFormData(file) {
+	const formData = new FormData();
+	formData.append("certificate", file);
+	return formData;
+}
+
 export function buildCandidateValidationFormData({ file, values }) {
 	const formData = new FormData();
 	formData.append("certificateData", JSON.stringify(normalizeCertificatePayload(values)));

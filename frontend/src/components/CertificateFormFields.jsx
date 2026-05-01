@@ -2,6 +2,7 @@ import React from 'react';
 
 export default function CertificateFormFields({
 	title,
+	description = 'Enter the certificate metadata exactly as it appears on the trusted document.',
 	values,
 	institutions = [],
 	showInstitutionField = false,
@@ -11,6 +12,7 @@ export default function CertificateFormFields({
 	onSubjectChange,
 	onAddSubject,
 	onRemoveSubject,
+	disabled = false,
 }) {
 	return (
 		<div className="space-y-6">
@@ -18,8 +20,7 @@ export default function CertificateFormFields({
 				<div>
 					<h3 className="text-lg font-semibold text-slate-900">{title}</h3>
 					<p className="text-sm text-slate-500">
-						Enter the certificate metadata exactly as it appears on the trusted
-						document.
+						{description}
 					</p>
 				</div>
 			) : null}
@@ -36,6 +37,7 @@ export default function CertificateFormFields({
 							onRootChange('certificateId', event.target.value)
 						}
 						placeholder="CERT-123"
+						disabled={disabled}
 						required
 					/>
 				</label>
@@ -52,7 +54,7 @@ export default function CertificateFormFields({
 								onChange={(event) =>
 									onRootChange('institutionId', event.target.value)
 								}
-								disabled={institutionFieldDisabled}
+								disabled={disabled || institutionFieldDisabled}
 								required
 							>
 								<option value="">Select an institution</option>
@@ -69,7 +71,7 @@ export default function CertificateFormFields({
 								onChange={(event) =>
 									onRootChange('institutionId', event.target.value)
 								}
-								disabled={institutionFieldDisabled}
+								disabled={disabled || institutionFieldDisabled}
 								placeholder="Institution Mongo ID"
 								required
 							/>
@@ -90,6 +92,7 @@ export default function CertificateFormFields({
 							onSectionChange('student', 'name', event.target.value)
 						}
 						placeholder="Student name"
+						disabled={disabled}
 						required
 					/>
 					<input
@@ -99,6 +102,7 @@ export default function CertificateFormFields({
 							onSectionChange('student', 'seatNo', event.target.value)
 						}
 						placeholder="Seat number"
+						disabled={disabled}
 						required
 					/>
 					<input
@@ -108,6 +112,7 @@ export default function CertificateFormFields({
 							onSectionChange('student', 'prn', event.target.value)
 						}
 						placeholder="PRN"
+						disabled={disabled}
 					/>
 					<input
 						className="rounded-lg border border-slate-300 px-3 py-2"
@@ -116,6 +121,7 @@ export default function CertificateFormFields({
 							onSectionChange('student', 'motherName', event.target.value)
 						}
 						placeholder="Mother name"
+						disabled={disabled}
 					/>
 				</div>
 			</section>
@@ -132,6 +138,7 @@ export default function CertificateFormFields({
 							onSectionChange('college', 'code', event.target.value)
 						}
 						placeholder="College code"
+						disabled={disabled}
 						required
 					/>
 					<input
@@ -141,6 +148,7 @@ export default function CertificateFormFields({
 							onSectionChange('college', 'name', event.target.value)
 						}
 						placeholder="College name"
+						disabled={disabled}
 						required
 					/>
 					<input
@@ -150,6 +158,7 @@ export default function CertificateFormFields({
 							onSectionChange('exam', 'course', event.target.value)
 						}
 						placeholder="Course"
+						disabled={disabled}
 						required
 					/>
 					<input
@@ -159,6 +168,7 @@ export default function CertificateFormFields({
 							onSectionChange('exam', 'branchCode', event.target.value)
 						}
 						placeholder="Branch code"
+						disabled={disabled}
 					/>
 					<input
 						className="rounded-lg border border-slate-300 px-3 py-2"
@@ -167,6 +177,7 @@ export default function CertificateFormFields({
 							onSectionChange('exam', 'session', event.target.value)
 						}
 						placeholder="Session"
+						disabled={disabled}
 						required
 					/>
 					<input
@@ -176,6 +187,7 @@ export default function CertificateFormFields({
 							onSectionChange('exam', 'year', event.target.value)
 						}
 						placeholder="Year"
+						disabled={disabled}
 						required
 					/>
 				</div>
@@ -193,6 +205,7 @@ export default function CertificateFormFields({
 						onChange={(event) =>
 							onSectionChange('issue', 'date', event.target.value)
 						}
+						disabled={disabled}
 						required
 					/>
 					<input
@@ -202,6 +215,7 @@ export default function CertificateFormFields({
 							onSectionChange('issue', 'serialNo', event.target.value)
 						}
 						placeholder="Serial number"
+						disabled={disabled}
 					/>
 					<input
 						type="number"
@@ -212,6 +226,7 @@ export default function CertificateFormFields({
 							onSectionChange('summary', 'sgpa', event.target.value)
 						}
 						placeholder="SGPA"
+						disabled={disabled}
 					/>
 					<input
 						type="number"
@@ -221,6 +236,7 @@ export default function CertificateFormFields({
 							onSectionChange('summary', 'totalCredits', event.target.value)
 						}
 						placeholder="Total credits"
+						disabled={disabled}
 					/>
 				</div>
 			</section>
@@ -238,7 +254,8 @@ export default function CertificateFormFields({
 					<button
 						type="button"
 						onClick={onAddSubject}
-						className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+						disabled={disabled}
+						className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
 					>
 						Add Subject
 					</button>
@@ -257,7 +274,8 @@ export default function CertificateFormFields({
 								<button
 									type="button"
 									onClick={() => onRemoveSubject(index)}
-									className="text-sm font-medium text-rose-600 hover:text-rose-700"
+									disabled={disabled}
+									className="text-sm font-medium text-rose-600 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
 								>
 									Remove
 								</button>
@@ -270,6 +288,7 @@ export default function CertificateFormFields({
 										onSubjectChange(index, 'courseCode', event.target.value)
 									}
 									placeholder="Course code"
+									disabled={disabled}
 									required
 								/>
 								<input
@@ -279,6 +298,7 @@ export default function CertificateFormFields({
 										onSubjectChange(index, 'courseName', event.target.value)
 									}
 									placeholder="Course name"
+									disabled={disabled}
 									required
 								/>
 								<input
@@ -288,6 +308,7 @@ export default function CertificateFormFields({
 										onSubjectChange(index, 'type', event.target.value)
 									}
 									placeholder="Type"
+									disabled={disabled}
 								/>
 								<input
 									type="number"
@@ -297,6 +318,7 @@ export default function CertificateFormFields({
 										onSubjectChange(index, 'credits', event.target.value)
 									}
 									placeholder="Credits"
+									disabled={disabled}
 								/>
 								<input
 									className="rounded-lg border border-slate-300 px-3 py-2"
@@ -305,6 +327,7 @@ export default function CertificateFormFields({
 										onSubjectChange(index, 'grade', event.target.value)
 									}
 									placeholder="Grade"
+									disabled={disabled}
 								/>
 								<input
 									type="number"
@@ -314,6 +337,7 @@ export default function CertificateFormFields({
 										onSubjectChange(index, 'creditPoints', event.target.value)
 									}
 									placeholder="Credit points"
+									disabled={disabled}
 								/>
 							</div>
 						</div>

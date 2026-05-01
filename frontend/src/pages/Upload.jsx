@@ -1,25 +1,26 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import {
-	AlertTriangle,
+	AlertCircle,
 	CheckCircle2,
+	FileText,
 	FileUp,
+	Image as ImageIcon,
 	Loader,
-	Plus,
-	Trash2,
 	UploadCloud,
+	XCircle,
 } from "lucide-react";
 import { api } from "../lib/api";
 import useAuth from "../hooks/useAuth";
 import {
 	addCertificateSubject,
-	buildBulkUploadFormData,
+	buildCertificateExtractionFormData,
 	buildTrustedUploadFormData,
 	createEmptyCertificateForm,
 	removeCertificateSubject,
 	setCertificateRootField,
 	setCertificateSectionField,
 	setCertificateSubjectField,
-	validateBulkUploadRecords,
 	validateCertificateFile,
 } from "../lib/certificates";
 import { canUploadTrustedCertificates } from "../lib/roles";
@@ -27,39 +28,69 @@ import { normalizeInstitutionSummary } from "../lib/normalizers";
 import CertificateFormFields from "../components/CertificateFormFields";
 
 function getErrorMessage(error, fallback) {
+	const validationErrors = error?.response?.data?.errors;
+
+	if (Array.isArray(validationErrors) && validationErrors.length > 0) {
+		return validationErrors
+			.map((item) => item.msg || item.message)
+			.filter(Boolean)
+			.join(" ");
+	}
+
 	return error?.response?.data?.message || error?.message || fallback;
 }
 
-function createBulkRecord() {
-	return {
-		id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-		values: createEmptyCertificateForm(),
-		file: null,
-	};
+function getUploadedCertificateId(result) {
+	return result?.certificateId || result?.certificate?.certificateId || "";
+}
+
+function getUploadedCertificateStatus(result) {
+	return result?.verificationStatus || result?.certificate?.status || "";
+}
+
+function getUploadedCertificateHash(result) {
+	return result?.certificateHash || result?.certificate?.certificateHash || "";
 }
 
 export default function UploadPage() {
-	const [tab, setTab] = useState("single");
 	const [institutions, setInstitutions] = useState([]);
 	const [institutionsLoading, setInstitutionsLoading] = useState(false);
 	const [institutionsError, setInstitutionsError] = useState("");
-	const [singleValues, setSingleValues] = useState(createEmptyCertificateForm());
-	const [singleFile, setSingleFile] = useState(null);
-	const [singleLoading, setSingleLoading] = useState(false);
-	const [singleError, setSingleError] = useState("");
-	const [singleResult, setSingleResult] = useState(null);
-	const [bulkRecords, setBulkRecords] = useState([createBulkRecord()]);
-	const [bulkLoading, setBulkLoading] = useState(false);
-	const [bulkError, setBulkError] = useState("");
-	const [bulkResult, setBulkResult] = useState(null);
+	const [values, setValues] = useState(createEmptyCertificateForm());
+	const [file, setFile] = useState(null);
+	const [previewUrl, setPreviewUrl] = useState("");
+	const [isDragging, setIsDragging] = useState(false);
+	const [isExtracting, setIsExtracting] = useState(false);
+	const [extraction, setExtraction] = useState(null);
+	const [extractionResponse, setExtractionResponse] = useState(null);
+	const [isSubmitting, setIsSubmitting] = useState(false);
+	const [error, setError] = useState("");
+	const [result, setResult] = useState(null);
+	const fileInputRef = useRef(null);
+	const navigate = useNavigate();
 	const { user } = useAuth();
 
 	const isAdmin = user?.role === "admin";
 	const uploadAllowed = canUploadTrustedCertificates(user?.role);
+	const hasInstitutionScope = Boolean(user?.institution?.id || user?.institutionId);
+	const needsInstitutionAssignment = !isAdmin && !hasInstitutionScope;
+	const isImageFile = Boolean(file?.type?.toLowerCase().startsWith("image/"));
+	const missingRequiredFields = extraction?.missingRequiredFields || [];
+	const canRegister =
+		Boolean(file && extraction) &&
+		missingRequiredFields.length === 0 &&
+		!isExtracting &&
+		!isSubmitting;
+	const extractionResponseClasses = {
+		loading: "border-slate-200 bg-white text-slate-700",
+		success: "border-emerald-200 bg-emerald-50 text-emerald-700",
+		warning: "border-amber-200 bg-amber-50 text-amber-800",
+		error: "border-rose-200 bg-rose-50 text-rose-700",
+	};
 
 	useEffect(() => {
 		if (!isAdmin) {
-			return;
+			return undefined;
 		}
 
 		let isActive = true;
@@ -112,92 +143,213 @@ export default function UploadPage() {
 		};
 	}, [isAdmin]);
 
-	function updateSingleRoot(field, value) {
-		setSingleValues((current) => setCertificateRootField(current, field, value));
+	useEffect(() => {
+		if (!file || !isImageFile) {
+			setPreviewUrl("");
+			return undefined;
+		}
+
+		const nextPreviewUrl = URL.createObjectURL(file);
+		setPreviewUrl(nextPreviewUrl);
+
+		return () => {
+			URL.revokeObjectURL(nextPreviewUrl);
+		};
+	}, [file, isImageFile]);
+
+	function updateRoot(field, nextValue) {
+		setValues((current) => setCertificateRootField(current, field, nextValue));
 	}
 
-	function updateSingleSection(section, field, value) {
-		setSingleValues((current) =>
-			setCertificateSectionField(current, section, field, value)
+	function updateSection(section, field, nextValue) {
+		setValues((current) =>
+			setCertificateSectionField(current, section, field, nextValue)
 		);
 	}
 
-	function updateSingleSubject(index, field, value) {
-		setSingleValues((current) =>
-			setCertificateSubjectField(current, index, field, value)
+	function updateSubject(index, field, nextValue) {
+		setValues((current) =>
+			setCertificateSubjectField(current, index, field, nextValue)
 		);
 	}
 
-	function addSingleSubject() {
-		setSingleValues((current) => addCertificateSubject(current));
+	function addSubject() {
+		setValues((current) => addCertificateSubject(current));
 	}
 
-	function removeSingleSubject(index) {
-		setSingleValues((current) => removeCertificateSubject(current, index));
+	function removeSubject(index) {
+		setValues((current) => removeCertificateSubject(current, index));
 	}
 
-	function updateBulkRecord(recordId, updater) {
-		setBulkRecords((current) =>
-			current.map((record) =>
-				record.id === recordId ? updater(record) : record
-			)
-		);
-	}
+	function selectFile(nextFile) {
+		setFile(nextFile || null);
+		setResult(null);
+		setExtraction(null);
+		setExtractionResponse(null);
+		setValues(createEmptyCertificateForm());
 
-	function updateBulkRoot(recordId, field, value) {
-		updateBulkRecord(recordId, (record) => ({
-			...record,
-			values: setCertificateRootField(record.values, field, value),
-		}));
-	}
-
-	function updateBulkSection(recordId, section, field, value) {
-		updateBulkRecord(recordId, (record) => ({
-			...record,
-			values: setCertificateSectionField(record.values, section, field, value),
-		}));
-	}
-
-	function updateBulkSubject(recordId, index, field, value) {
-		updateBulkRecord(recordId, (record) => ({
-			...record,
-			values: setCertificateSubjectField(record.values, index, field, value),
-		}));
-	}
-
-	function addBulkSubject(recordId) {
-		updateBulkRecord(recordId, (record) => ({
-			...record,
-			values: addCertificateSubject(record.values),
-		}));
-	}
-
-	function removeBulkSubject(recordId, index) {
-		updateBulkRecord(recordId, (record) => ({
-			...record,
-			values: removeCertificateSubject(record.values, index),
-		}));
-	}
-
-	async function submitSingleUpload(event) {
-		event.preventDefault();
-		setSingleLoading(true);
-		setSingleError("");
-		setSingleResult(null);
-
-		const fileError = validateCertificateFile(singleFile);
-		if (fileError) {
-			setSingleError(fileError);
-			setSingleLoading(false);
+		if (!nextFile) {
+			setError("");
+			if (fileInputRef.current) {
+				fileInputRef.current.value = "";
+			}
 			return;
 		}
+
+		setError(validateCertificateFile(nextFile));
+	}
+
+	function resetUpload() {
+		setValues(createEmptyCertificateForm());
+		setFile(null);
+		setExtraction(null);
+		setExtractionResponse(null);
+		setError("");
+		setResult(null);
+
+		if (fileInputRef.current) {
+			fileInputRef.current.value = "";
+		}
+	}
+
+	function handleDrag(event) {
+		event.preventDefault();
+		event.stopPropagation();
+	}
+
+	function handleDragEnter(event) {
+		handleDrag(event);
+		setIsDragging(true);
+	}
+
+	function handleDragLeave(event) {
+		handleDrag(event);
+		setIsDragging(false);
+	}
+
+	function handleDrop(event) {
+		handleDrag(event);
+		setIsDragging(false);
+		selectFile(event.dataTransfer.files?.[0] || null);
+	}
+
+	async function extractDetails() {
+		const fileError = validateCertificateFile(file);
+		if (fileError) {
+			setError(fileError);
+			setExtractionResponse({
+				type: "error",
+				message: fileError,
+			});
+			return;
+		}
+
+		if (needsInstitutionAssignment) {
+			const message =
+				"Your account must be assigned to an institution before extracting certificate details.";
+			setError(message);
+			setExtractionResponse({
+				type: "error",
+				message,
+			});
+			return;
+		}
+
+		setIsExtracting(true);
+		setError("");
+		setResult(null);
+		setExtraction(null);
+		setExtractionResponse({
+			type: "loading",
+			message: "AI extraction started. Reading the certificate file now...",
+		});
+		setValues(createEmptyCertificateForm());
+
+		try {
+			const response = await api.post(
+				"/certificates/extract",
+				buildCertificateExtractionFormData(file),
+				{
+					headers: {
+						"Content-Type": "multipart/form-data",
+					},
+				}
+			);
+
+			if (response.data?.certificateData) {
+				setValues(response.data.certificateData);
+			}
+
+			setExtraction(response.data?.extraction || {});
+
+			if (response.data?.success === false) {
+				const message =
+					response.data?.message ||
+					"AI extraction completed, but required fields are missing.";
+				setError(message);
+				setExtractionResponse({
+					type: "warning",
+					message,
+				});
+			} else {
+				setExtractionResponse({
+					type: "success",
+					message:
+						response.data?.message ||
+						"Certificate details extracted successfully.",
+				});
+			}
+		} catch (requestError) {
+			const message = getErrorMessage(
+				requestError,
+				"Unable to extract certificate details from this file."
+			);
+			setError(message);
+			setExtractionResponse({
+				type: "error",
+				message,
+			});
+		} finally {
+			setIsExtracting(false);
+		}
+	}
+
+	async function submitUpload(event) {
+		event.preventDefault();
+
+		const fileError = validateCertificateFile(file);
+		if (fileError) {
+			setError(fileError);
+			return;
+		}
+
+		if (!extraction) {
+			setError("Extract certificate details before registration.");
+			return;
+		}
+
+		if (missingRequiredFields.length > 0) {
+			setError(
+				`AI extraction is missing required fields: ${missingRequiredFields.join(", ")}.`
+			);
+			return;
+		}
+
+		if (needsInstitutionAssignment) {
+			setError("Your account must be assigned to an institution before uploading certificates.");
+			return;
+		}
+
+		setIsSubmitting(true);
+		setError("");
+		setResult(null);
 
 		try {
 			const response = await api.post(
 				"/certificates/verify",
 				buildTrustedUploadFormData({
-					file: singleFile,
-					values: singleValues,
+					file,
+					values,
 				}),
 				{
 					headers: {
@@ -206,59 +358,44 @@ export default function UploadPage() {
 				}
 			);
 
-			setSingleResult(response.data);
+			if (response.data?.success === false) {
+				throw new Error(response.data?.message || "Certificate upload failed.");
+			}
+
+			setResult(response.data || {});
 		} catch (requestError) {
-			setSingleError(
-				getErrorMessage(requestError, "Unable to upload trusted certificate.")
+			setError(
+				getErrorMessage(
+					requestError,
+					"Unable to upload and register this certificate."
+				)
 			);
 		} finally {
-			setSingleLoading(false);
+			setIsSubmitting(false);
 		}
 	}
 
-	async function submitBulkUpload(event) {
-		event.preventDefault();
-		setBulkLoading(true);
-		setBulkError("");
-		setBulkResult(null);
-
-		const validationMessage = validateBulkUploadRecords(bulkRecords);
-		if (validationMessage) {
-			setBulkError(validationMessage);
-			setBulkLoading(false);
-			return;
-		}
-
-		try {
-			const response = await api.post(
-				"/certificates/bulk",
-				buildBulkUploadFormData(bulkRecords),
-				{
-					headers: {
-						"Content-Type": "multipart/form-data",
-					},
-				}
-			);
-
-			setBulkResult(response.data);
-		} catch (requestError) {
-			setBulkError(
-				getErrorMessage(requestError, "Unable to complete bulk trusted upload.")
-			);
-		} finally {
-			setBulkLoading(false);
-		}
+	function goToCertificates() {
+		const certificateId = getUploadedCertificateId(result);
+		navigate("/certificates", {
+			state: {
+				uploadSuccess: true,
+				message:
+					result?.message ||
+					"Certificate uploaded and registered successfully.",
+				certificateId,
+			},
+		});
 	}
 
 	if (!uploadAllowed) {
 		return (
 			<div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
 				<h1 className="text-2xl font-semibold text-slate-900">
-					Trusted Uploads
+					Upload Certificate
 				</h1>
 				<p className="mt-2 text-slate-500">
-					Only admins, institution admins, and university admins can upload
-					trusted certificate records.
+					Only authorized admin roles can upload certificate records.
 				</p>
 			</div>
 		);
@@ -266,44 +403,22 @@ export default function UploadPage() {
 
 	return (
 		<div className="space-y-6">
-			<div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-900 shadow-sm">
-				<div className="flex items-start gap-3">
-					<AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-					<div>
-						<h1 className="text-xl font-semibold">Trusted Certificate Uploads</h1>
-						<p className="mt-1 text-sm">
-							The backend route is named `/certificates/verify`, but in this UI it
-							is treated as a trusted record upload. Newly created records now run
-							AI verification during upload, while candidate matching still uses
-							the separate `/certificates/validate` flow.
-						</p>
-					</div>
+			<div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+				<div>
+					<h1 className="text-3xl font-bold text-slate-900">
+						Upload Certificate
+					</h1>
+					<p className="text-slate-500">
+						Upload a PDF or image certificate, then let AI extract the trusted record data.
+					</p>
 				</div>
-			</div>
-
-			<div className="flex flex-wrap gap-2">
-				<button
-					type="button"
-					onClick={() => setTab("single")}
-					className={`rounded-lg border px-4 py-2 text-sm font-semibold ${
-						tab === "single"
-							? "border-indigo-600 bg-indigo-600 text-white"
-							: "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-					}`}
+				<Link
+					to="/demo"
+					className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
 				>
-					Single Upload
-				</button>
-				<button
-					type="button"
-					onClick={() => setTab("bulk")}
-					className={`rounded-lg border px-4 py-2 text-sm font-semibold ${
-						tab === "bulk"
-							? "border-indigo-600 bg-indigo-600 text-white"
-							: "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-					}`}
-				>
-					Bulk Upload
-				</button>
+					<FileText className="h-4 w-4" />
+					OCR Demo
+				</Link>
 			</div>
 
 			{institutionsError ? (
@@ -311,228 +426,263 @@ export default function UploadPage() {
 					{institutionsError}
 				</div>
 			) : null}
-			{isAdmin && institutionsLoading ? (
+
+			{institutionsLoading ? (
 				<div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
-					Loading institutions for admin selection...
-				</div>
-			) : null}
-			{!isAdmin ? (
-				<div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-700">
-					Your institution is derived from the authenticated token, so no
-					institution selector is required here.
+					Loading institutions...
 				</div>
 			) : null}
 
-			{tab === "single" ? (
-				<section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-					<div className="mb-6 flex items-center gap-3">
-						<UploadCloud className="h-5 w-5 text-slate-400" />
-						<div>
-							<h2 className="text-xl font-semibold text-slate-900">
-								Single Trusted Upload
-							</h2>
-							<p className="text-sm text-slate-500">
-								Create one trusted certificate record with `POST /certificates/verify`
-								and run the AI verification pipeline immediately.
-							</p>
-						</div>
+			{needsInstitutionAssignment ? (
+				<div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+					<AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+					<span>
+						Your account needs an institution assignment before this upload can
+						be registered.
+					</span>
+				</div>
+			) : null}
+
+			<section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+				<form onSubmit={submitUpload} className="space-y-6">
+					<div
+						className={`rounded-2xl border-2 border-dashed p-6 transition ${
+							isDragging
+								? "border-indigo-500 bg-indigo-50"
+								: "border-slate-300 bg-slate-50"
+						}`}
+						onDragEnter={handleDragEnter}
+						onDragLeave={handleDragLeave}
+						onDragOver={handleDrag}
+						onDrop={handleDrop}
+					>
+						{file ? (
+							<div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+								<div className="flex min-w-0 items-center gap-4">
+									<div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white">
+										{previewUrl ? (
+											<img
+												src={previewUrl}
+												alt="Selected certificate preview"
+												className="h-full w-full object-cover"
+											/>
+										) : (
+											<FileText className="h-10 w-10 text-indigo-500" />
+										)}
+									</div>
+									<div className="min-w-0">
+										<p className="truncate font-semibold text-slate-900">
+											{file.name}
+										</p>
+										<p className="text-sm text-slate-500">
+											{(file.size / (1024 * 1024)).toFixed(2)} MB
+										</p>
+									</div>
+								</div>
+								<button
+									type="button"
+									onClick={() => selectFile(null)}
+									className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+								>
+									<XCircle className="h-4 w-4" />
+									Remove
+								</button>
+							</div>
+						) : (
+							<label
+								htmlFor="certificate-file"
+								className="flex cursor-pointer flex-col items-center justify-center gap-3 py-8 text-center"
+							>
+								<div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-indigo-600 shadow-sm">
+									{isDragging ? (
+										<FileUp className="h-8 w-8" />
+									) : (
+										<UploadCloud className="h-8 w-8" />
+									)}
+								</div>
+								<div>
+									<p className="text-lg font-semibold text-slate-900">
+										Drop a PDF or image certificate here
+									</p>
+									<p className="mt-1 text-sm text-slate-500">
+										PDF, JPG, JPEG, PNG, TIFF, or TIF up to 10MB.
+									</p>
+								</div>
+							</label>
+						)}
+						<input
+							ref={fileInputRef}
+							id="certificate-file"
+							type="file"
+							accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif,image/*,application/pdf"
+							className="sr-only"
+							onChange={(event) => selectFile(event.target.files?.[0] || null)}
+						/>
 					</div>
 
-					<form onSubmit={submitSingleUpload} className="space-y-6">
-						<CertificateFormFields
-							title="Trusted Certificate Metadata"
-							values={singleValues}
-							institutions={institutions}
-							showInstitutionField={isAdmin}
-							onRootChange={updateSingleRoot}
-							onSectionChange={updateSingleSection}
-							onSubjectChange={updateSingleSubject}
-							onAddSubject={addSingleSubject}
-							onRemoveSubject={removeSingleSubject}
-						/>
-
-						<div className="space-y-2">
-							<label className="block text-sm font-medium text-slate-700">
-								Certificate file
-							</label>
-							<input
-								type="file"
-								accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif"
-								onChange={(event) => setSingleFile(event.target.files?.[0] || null)}
-								className="w-full rounded-lg border border-slate-300 px-3 py-2"
-							/>
-							<p className="text-xs text-slate-500">
-								Allowed types: PDF, JPG, JPEG, PNG, TIFF, TIF. Maximum file size:
-								10MB.
-							</p>
-						</div>
-
-						{singleError ? (
-							<div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-								{singleError}
-							</div>
-						) : null}
-
-						<button
-							type="submit"
-							disabled={singleLoading}
-							className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-						>
-							{singleLoading ? (
-								<Loader className="h-4 w-4 animate-spin" />
-							) : (
-								<FileUp className="h-4 w-4" />
-							)}
-							Upload trusted certificate
-						</button>
-					</form>
-
-					{singleResult ? (
-						<div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-							<div className="flex items-center gap-2 text-emerald-700">
-								<CheckCircle2 className="h-5 w-5" />
-								<span className="font-semibold">
-									{singleResult.message || "Trusted certificate uploaded successfully."}
-								</span>
-							</div>
-							<pre className="mt-3 overflow-x-auto rounded-lg bg-emerald-950 p-3 text-xs text-emerald-50">
-								{JSON.stringify(singleResult, null, 2)}
-							</pre>
-						</div>
-					) : null}
-				</section>
-			) : (
-				<section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-					<div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+					<div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
 						<div>
-							<h2 className="text-xl font-semibold text-slate-900">
-								Bulk Trusted Upload
+							<h2 className="text-base font-semibold text-slate-900">
+								AI extraction
 							</h2>
 							<p className="text-sm text-slate-500">
-								Send one `records` JSON array and matching `certificates` files in
-								order to `POST /certificates/bulk`. Each file is stored as a trusted
-								record and passed through AI verification.
+								Extracted details are read-only and come from the uploaded file.
 							</p>
 						</div>
 						<button
 							type="button"
-							onClick={() =>
-								setBulkRecords((current) => [...current, createBulkRecord()])
-							}
-							className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+							onClick={extractDetails}
+							disabled={!file || isExtracting || isSubmitting}
+							className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
 						>
-							<Plus className="h-4 w-4" />
-							Add record
+							{isExtracting ? (
+								<Loader className="h-4 w-4 animate-spin" />
+							) : (
+								<FileText className="h-4 w-4" />
+							)}
+							{isExtracting ? "Extracting..." : "Extract Details"}
 						</button>
 					</div>
 
-					<form onSubmit={submitBulkUpload} className="space-y-6">
-						<div className="space-y-6">
-							{bulkRecords.map((record, index) => (
-								<div
-									key={record.id}
-									className="rounded-2xl border border-slate-200 p-5"
-								>
-									<div className="mb-4 flex items-center justify-between gap-3">
-										<div>
-											<h3 className="text-lg font-semibold text-slate-900">
-												Record {index + 1}
-											</h3>
-											<p className="text-sm text-slate-500">
-												Keep the metadata and file in the same card so bulk order
-												stays 1:1.
-											</p>
-										</div>
-										{bulkRecords.length > 1 ? (
-											<button
-												type="button"
-												onClick={() =>
-													setBulkRecords((current) =>
-														current.filter((item) => item.id !== record.id)
-													)
-												}
-												className="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50"
-											>
-												<Trash2 className="h-4 w-4" />
-												Remove
-											</button>
-										) : null}
-									</div>
-
-									<CertificateFormFields
-										values={record.values}
-										institutions={institutions}
-										showInstitutionField={isAdmin}
-										onRootChange={(field, value) =>
-											updateBulkRoot(record.id, field, value)
-										}
-										onSectionChange={(section, field, value) =>
-											updateBulkSection(record.id, section, field, value)
-										}
-										onSubjectChange={(subjectIndex, field, value) =>
-											updateBulkSubject(record.id, subjectIndex, field, value)
-										}
-										onAddSubject={() => addBulkSubject(record.id)}
-										onRemoveSubject={(subjectIndex) =>
-											removeBulkSubject(record.id, subjectIndex)
-										}
-									/>
-
-									<div className="mt-6 space-y-2">
-										<label className="block text-sm font-medium text-slate-700">
-											Certificate file for record {index + 1}
-										</label>
-										<input
-											type="file"
-											accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif"
-											onChange={(event) =>
-												updateBulkRecord(record.id, (currentRecord) => ({
-													...currentRecord,
-													file: event.target.files?.[0] || null,
-												}))
-											}
-											className="w-full rounded-lg border border-slate-300 px-3 py-2"
-										/>
-									</div>
-								</div>
-							))}
-						</div>
-
-						{bulkError ? (
-							<div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-								{bulkError}
-							</div>
-						) : null}
-
-						<button
-							type="submit"
-							disabled={bulkLoading}
-							className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+					{extractionResponse ? (
+						<div
+							className={`flex gap-3 rounded-xl border px-4 py-3 text-sm ${
+								extractionResponseClasses[extractionResponse.type] ||
+								extractionResponseClasses.loading
+							}`}
 						>
-							{bulkLoading ? (
-								<Loader className="h-4 w-4 animate-spin" />
+							{extractionResponse.type === "loading" ? (
+								<Loader className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+							) : extractionResponse.type === "success" ? (
+								<CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
 							) : (
-								<UploadCloud className="h-4 w-4" />
+								<AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
 							)}
-							Upload bulk trusted records
-						</button>
-					</form>
-
-					{bulkResult ? (
-						<div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-							<div className="flex items-center gap-2 text-emerald-700">
-								<CheckCircle2 className="h-5 w-5" />
-								<span className="font-semibold">
-									{bulkResult.message || "Bulk upload completed."}
-								</span>
-							</div>
-							<pre className="mt-3 overflow-x-auto rounded-lg bg-emerald-950 p-3 text-xs text-emerald-50">
-								{JSON.stringify(bulkResult, null, 2)}
-							</pre>
+							<span>{extractionResponse.message}</span>
 						</div>
 					) : null}
-				</section>
-			)}
+
+					{extraction ? (
+						<div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
+							<div className="font-semibold">
+								OCR confidence: {Math.round(extraction.confidence || 0)}%
+							</div>
+							{missingRequiredFields.length > 0 ? (
+								<p className="mt-1">
+									Missing required fields: {missingRequiredFields.join(", ")}.
+								</p>
+							) : (
+								<p className="mt-1">
+									All required registration fields were generated.
+								</p>
+							)}
+							{Array.isArray(extraction.warnings) &&
+							extraction.warnings.length > 0 ? (
+								<ul className="mt-2 list-disc space-y-1 pl-5">
+									{extraction.warnings.map((warning) => (
+										<li key={warning}>{warning}</li>
+									))}
+								</ul>
+							) : null}
+						</div>
+					) : null}
+
+					<CertificateFormFields
+						title="AI Extracted Details"
+						description="These fields are generated from AI extraction and are locked for upload users."
+						values={values}
+						institutions={institutions}
+						showInstitutionField={isAdmin}
+						disabled
+						onRootChange={updateRoot}
+						onSectionChange={updateSection}
+						onSubjectChange={updateSubject}
+						onAddSubject={addSubject}
+						onRemoveSubject={removeSubject}
+					/>
+
+					{error ? (
+						<div className="flex gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+							<AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+							<span>{error}</span>
+						</div>
+					) : null}
+
+					<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+						<button
+							type="submit"
+							disabled={!canRegister}
+							className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							{isSubmitting ? (
+								<Loader className="h-4 w-4 animate-spin" />
+							) : (
+								<FileUp className="h-4 w-4" />
+							)}
+							{isSubmitting ? "Uploading..." : "Upload and Register"}
+						</button>
+						<button
+							type="button"
+							onClick={resetUpload}
+							disabled={isSubmitting}
+							className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							<XCircle className="h-4 w-4" />
+							Clear
+						</button>
+					</div>
+				</form>
+
+				{result ? (
+					<div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+						<div className="flex items-center gap-2 text-emerald-700">
+							<CheckCircle2 className="h-5 w-5" />
+							<span className="font-semibold">
+								{result.message ||
+									"Certificate uploaded and registered successfully."}
+							</span>
+						</div>
+						<div className="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
+							<div className="rounded-lg bg-white/80 p-3">
+								<p className="text-slate-500">Certificate ID</p>
+								<p className="mt-1 break-words font-semibold text-slate-900">
+									{getUploadedCertificateId(result) || "--"}
+								</p>
+							</div>
+							<div className="rounded-lg bg-white/80 p-3">
+								<p className="text-slate-500">Status</p>
+								<p className="mt-1 font-semibold text-slate-900">
+									{getUploadedCertificateStatus(result) || "--"}
+								</p>
+							</div>
+							<div className="rounded-lg bg-white/80 p-3">
+								<p className="text-slate-500">Hash</p>
+								<p className="mt-1 break-words font-semibold text-slate-900">
+									{getUploadedCertificateHash(result) || "--"}
+								</p>
+							</div>
+						</div>
+						<div className="mt-4 flex flex-col gap-3 sm:flex-row">
+							<button
+								type="button"
+								onClick={goToCertificates}
+								className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
+							>
+								<ImageIcon className="h-4 w-4" />
+								View Certificates
+							</button>
+							<button
+								type="button"
+								onClick={resetUpload}
+								className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
+							>
+								<UploadCloud className="h-4 w-4" />
+								Upload Another
+							</button>
+						</div>
+					</div>
+				) : null}
+			</section>
 		</div>
 	);
 }

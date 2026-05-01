@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
 	AlertTriangle,
 	CheckCircle2,
@@ -63,6 +64,8 @@ function formatDateTime(value) {
 }
 
 export default function CertificatesPage() {
+	const location = useLocation();
+	const navigate = useNavigate();
 	const [filters, setFilters] = useState(DEFAULT_FILTERS);
 	const [query, setQuery] = useState(DEFAULT_FILTERS);
 	const [certificates, setCertificates] = useState([]);
@@ -93,6 +96,7 @@ export default function CertificatesPage() {
 	const [manualError, setManualError] = useState('');
 	const [manualSuccess, setManualSuccess] = useState('');
 	const [socketNotice, setSocketNotice] = useState('');
+	const [uploadNotice, setUploadNotice] = useState('');
 	const { user, lastStatusUpdate } = useAuth();
 
 	const validationAllowed = canValidateCandidate(user?.role);
@@ -127,6 +131,21 @@ export default function CertificatesPage() {
 	useEffect(() => {
 		fetchCertificates(query);
 	}, [query]);
+
+	useEffect(() => {
+		if (!location.state?.uploadSuccess) {
+			return;
+		}
+
+		const certificateId = location.state.certificateId
+			? ` Certificate ${location.state.certificateId} is available in the list.`
+			: '';
+
+		setUploadNotice(
+			`${location.state.message || 'Certificate registered successfully.'}${certificateId}`,
+		);
+		navigate(location.pathname, { replace: true, state: {} });
+	}, [location.pathname, location.state, navigate]);
 
 	useEffect(() => {
 		if (!selectedCertificate?.id) {
@@ -369,6 +388,12 @@ export default function CertificatesPage() {
 			{socketNotice ? (
 				<div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-700">
 					{socketNotice}
+				</div>
+			) : null}
+
+			{uploadNotice ? (
+				<div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+					{uploadNotice}
 				</div>
 			) : null}
 
