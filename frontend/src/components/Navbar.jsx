@@ -1,7 +1,12 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { FileUp } from "lucide-react";
 import useAuth from "../hooks/useAuth";
-import { formatRoleLabel, getDefaultRouteForRole } from "../lib/roles";
+import {
+	canUploadTrustedCertificates,
+	formatRoleLabel,
+	getDefaultRouteForRole,
+} from "../lib/roles";
 
 export default function Navbar() {
 	const { logout, user } = useAuth();
@@ -29,6 +34,15 @@ export default function Navbar() {
 					>
 						Certificates
 					</Link>
+					{canUploadTrustedCertificates(user?.role) ? (
+						<Link
+							className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+							to="/upload"
+						>
+							<FileUp className="h-4 w-4" />
+							Upload
+						</Link>
+					) : null}
 					<button className="btn" onClick={logout}>
 						Logout
 					</button>

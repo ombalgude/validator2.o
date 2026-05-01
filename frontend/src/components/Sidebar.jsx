@@ -30,15 +30,9 @@ export default function Sidebar() {
 					className="block px-2 py-2 rounded hover:bg-slate-100"
 					to="/upload"
 				>
-					Trusted Uploads
+					Upload Certificate
 				</Link>
 			) : null}
-			<Link
-				className="block px-2 py-2 rounded hover:bg-slate-100"
-				to="/demo"
-			>
-				OCR Demo
-			</Link>
 		</div>
 	);
 }

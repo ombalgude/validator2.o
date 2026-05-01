@@ -78,6 +78,7 @@ function App() {
 					</ProtectedPage>
 				}
 			/>
+			<Route path="/certificate" element={<Navigate to="/certificates" replace />} />
 			<Route
 				path="/upload"
 				element={
