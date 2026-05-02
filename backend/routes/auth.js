@@ -1,12 +1,66 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const User = require('../models/User');
+const UniversityAdminRequest = require('../models/UniversityAdminRequest');
 const { validateUserRegistration, validateUserLogin } = require('../middleware/validation');
 const { auth } = require('../middleware/auth');
 
 const router = express.Router();
 const SELF_SIGNUP_ROLES = new Set(['institution_admin', 'university_admin', 'company_admin']);
+const APPROVAL_REQUIRED_ROLES = new Set(['university_admin']);
+
+const toTrimmedString = (value) => (value === null || value === undefined ? '' : String(value).trim());
+
+const normalizeSubmittedDocuments = (value) => {
+  let rawDocuments = Array.isArray(value) ? value : [];
+
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      rawDocuments = Array.isArray(parsed) ? parsed : [value];
+    } catch (_error) {
+      rawDocuments = value
+        .split(/\r?\n/)
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+    }
+  }
+
+  return rawDocuments
+    .map((document, index) => {
+      if (typeof document === 'string') {
+        const url = toTrimmedString(document);
+        return url ? { name: `Document ${index + 1}`, url, documentType: 'supporting_document' } : null;
+      }
+
+      if (!document || typeof document !== 'object') {
+        return null;
+      }
+
+      const url = toTrimmedString(document.url);
+      const name = toTrimmedString(document.name) || `Document ${index + 1}`;
+      const documentType = toTrimmedString(document.documentType) || 'supporting_document';
+
+      return name || url ? { name, url, documentType } : null;
+    })
+    .filter(Boolean);
+};
+
+const buildPendingUniversityAdminResponse = (request) => ({
+  message: 'University admin registration submitted for main admin approval.',
+  status: 'pending',
+  request: {
+    id: request._id,
+    status: request.status,
+    fullName: request.fullName,
+    email: request.email,
+    universityName: request.universityName,
+    submittedDocuments: request.submittedDocuments,
+    createdAt: request.createdAt,
+  },
+});
 
 const buildAuthResponse = (user, token, message) => ({
   message,
@@ -35,11 +89,20 @@ router.post('/register', validateUserRegistration, async (req, res) => {
     const fullName = typeof req.body.fullName === 'string' ? req.body.fullName.trim() : '';
     const requestedRole = String(req.body.role || 'company_admin').trim();
     const role = SELF_SIGNUP_ROLES.has(requestedRole) ? requestedRole : 'company_admin';
+    const requiresApproval = APPROVAL_REQUIRED_ROLES.has(role);
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ message: 'User already exists' });
+    }
+
+    const universityName = toTrimmedString(
+      req.body.universityName || req.body.university || req.body.organizationName
+    );
+
+    if (requiresApproval && !universityName) {
+      return res.status(400).json({ message: 'University name is required for university admin requests' });
     }
 
     // Hash password
@@ -51,10 +114,31 @@ router.post('/register', validateUserRegistration, async (req, res) => {
       email,
       password: hashedPassword,
       fullName,
-      role,
+      role: requiresApproval ? 'user' : role,
+      isActive: !requiresApproval,
     });
 
     await user.save();
+
+    if (requiresApproval) {
+      const institutionId = toTrimmedString(req.body.institutionId);
+      const request = new UniversityAdminRequest({
+        userId: user._id,
+        fullName,
+        email,
+        universityName,
+        institutionId: mongoose.Types.ObjectId.isValid(institutionId) ? institutionId : null,
+        adminCode: toTrimmedString(req.body.adminCode).toUpperCase(),
+        department: toTrimmedString(req.body.department),
+        title: toTrimmedString(req.body.title) || 'University Admin',
+        submittedDocuments: normalizeSubmittedDocuments(req.body.submittedDocuments),
+        status: 'pending',
+      });
+
+      await request.save();
+
+      return res.status(202).json(buildPendingUniversityAdminResponse(request));
+    }
 
     // Generate JWT
     const payload = {
