@@ -36,6 +36,9 @@ const PRIVATE_ROUTE_CHECKS = [
   { method: 'GET', path: '/api/dashboard/alerts' },
   { method: 'GET', path: '/api/verification-logs' },
   { method: 'GET', path: `/api/verification-logs/${SAMPLE_ID}` },
+  { method: 'GET', path: '/api/university-admin-requests' },
+  { method: 'PUT', path: `/api/university-admin-requests/${SAMPLE_ID}/approve`, body: {} },
+  { method: 'PUT', path: `/api/university-admin-requests/${SAMPLE_ID}/reject`, body: {} },
 ];
 
 ACCESS_TYPES.forEach((type) => {
