@@ -25,7 +25,7 @@ export const SIGNUP_ROLE_OPTIONS = [
 	{
 		value: "university_admin",
 		label: "University Admin",
-		description: "University upload access activates after institution assignment.",
+		description: "University access activates after main admin approval.",
 	},
 	{
 		value: "company_admin",
@@ -53,6 +53,10 @@ export function getDefaultRouteForRole(role, user = null) {
 }
 
 export function canAccessDashboard(role) {
+	return role === "admin";
+}
+
+export function canManageUniversityAdminApprovals(role) {
 	return role === "admin";
 }
 

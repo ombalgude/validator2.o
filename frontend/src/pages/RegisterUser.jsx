@@ -1,9 +1,14 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Button from "../components/Button";
+import UniversityAdminRequestFields, {
+	createUniversityAdminRequestDetails,
+	parseSubmittedDocuments,
+} from "../components/UniversityAdminRequestFields";
 import { ParticleCanvas } from "../components/ParticalCanvas";
 import {
 	AlertTriangle,
+	CheckCircle,
 	Loader,
 	Lock,
 	Mail,
@@ -23,8 +28,12 @@ export default function RegisterUser() {
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
 	const [role, setRole] = useState("company_admin");
+	const [approvalDetails, setApprovalDetails] = useState(
+		createUniversityAdminRequestDetails(),
+	);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
+	const [pendingNotice, setPendingNotice] = useState("");
 	const navigate = useNavigate();
 	const { register } = useAuth();
 	const selectedRole =
@@ -35,6 +44,7 @@ export default function RegisterUser() {
 		event.preventDefault();
 		setLoading(true);
 		setError("");
+		setPendingNotice("");
 
 		try {
 			const currentUser = await register({
@@ -42,7 +52,26 @@ export default function RegisterUser() {
 				email: email.trim(),
 				password,
 				role,
+				...(role === "university_admin"
+					? {
+							universityName: approvalDetails.universityName.trim(),
+							department: approvalDetails.department.trim(),
+							title: approvalDetails.title.trim(),
+							adminCode: approvalDetails.adminCode.trim(),
+							submittedDocuments: parseSubmittedDocuments(
+								approvalDetails.documentLinks,
+							),
+						}
+					: {}),
 			});
+
+			if (currentUser?.status === "pending") {
+				setPendingNotice(
+					currentUser.message ||
+						"Your university admin request is pending main admin approval.",
+				);
+				return;
+			}
 
 			navigate(getDefaultRouteForRole(currentUser?.role, currentUser), {
 				replace: true,
@@ -52,6 +81,13 @@ export default function RegisterUser() {
 		} finally {
 			setLoading(false);
 		}
+	}
+
+	function updateApprovalDetails(field, value) {
+		setApprovalDetails((current) => ({
+			...current,
+			[field]: value,
+		}));
 	}
 
 	return (
@@ -147,10 +183,24 @@ export default function RegisterUser() {
 							</p>
 						</div>
 
+						{role === "university_admin" ? (
+							<UniversityAdminRequestFields
+								details={approvalDetails}
+								onChange={updateApprovalDetails}
+							/>
+						) : null}
+
 						{error ? (
 							<div className="flex items-center gap-3 bg-rose-900/50 text-rose-300 text-sm p-3 rounded-lg border border-rose-500/30">
 								<AlertTriangle className="w-5 h-5" />
 								<span>{error}</span>
+							</div>
+						) : null}
+
+						{pendingNotice ? (
+							<div className="flex items-center gap-3 rounded-lg border border-emerald-500/30 bg-emerald-900/40 p-3 text-sm text-emerald-200">
+								<CheckCircle className="h-5 w-5" />
+								<span>{pendingNotice}</span>
 							</div>
 						) : null}
 

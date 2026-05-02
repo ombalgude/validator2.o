@@ -14,6 +14,7 @@ import RegisterInstitution from "./pages/RegisterInstitution.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import CertificatesPage from "./pages/Certificates.jsx";
 import UploadPage from "./pages/Upload.jsx";
+import UniversityAdminApprovalsPage from "./pages/UniversityAdminApprovals.jsx";
 
 function ProtectedPage({ children, roles }) {
 	return (
@@ -84,6 +85,14 @@ function App() {
 				element={
 					<ProtectedPage roles={["admin", "institution_admin", "university_admin"]}>
 						<UploadPage />
+					</ProtectedPage>
+				}
+			/>
+			<Route
+				path="/university-admin-approvals"
+				element={
+					<ProtectedPage roles={["admin"]}>
+						<UniversityAdminApprovalsPage />
 					</ProtectedPage>
 				}
 			/>

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import useAuth from "../hooks/useAuth";
 import {
 	canAccessDashboard,
+	canManageUniversityAdminApprovals,
 	canUploadTrustedCertificates,
 } from "../lib/roles";
 
@@ -31,6 +32,14 @@ export default function Sidebar() {
 					to="/upload"
 				>
 					Upload Certificate
+				</Link>
+			) : null}
+			{canManageUniversityAdminApprovals(user?.role) ? (
+				<Link
+					className="block px-2 py-2 rounded hover:bg-slate-100"
+					to="/university-admin-approvals"
+				>
+					University Admin Requests
 				</Link>
 			) : null}
 		</div>
