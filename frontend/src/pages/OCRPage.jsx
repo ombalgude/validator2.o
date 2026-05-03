@@ -32,7 +32,7 @@ const OCRPage = () => {
 	const [healthStatus, setHealthStatus] = useState({
 		loading: true,
 		ok: false,
-		message: "Checking backend health...",
+		message: "Checking service availability...",
 	});
 	const [verifyLoading, setVerifyLoading] = useState(false);
 	const [verifyError, setVerifyError] = useState("");
@@ -46,7 +46,7 @@ const OCRPage = () => {
 			setHealthStatus({
 				loading: true,
 				ok: false,
-				message: "Checking backend health...",
+				message: "Checking service availability...",
 			});
 
 			try {
@@ -64,7 +64,7 @@ const OCRPage = () => {
 					ok: false,
 					message: getErrorMessage(
 						error,
-						"Backend health check failed. Start the API server to continue."
+						"Service availability check failed. Start the service to continue."
 					),
 				});
 			}
@@ -194,7 +194,7 @@ const OCRPage = () => {
 				);
 			} else {
 				setVerifyError(
-					getErrorMessage(error, "Public verify request failed.")
+					getErrorMessage(error, "Verification failed.")
 				);
 			}
 		} finally {
@@ -240,8 +240,8 @@ const OCRPage = () => {
 							<div>
 								<h1 className="text-3xl font-bold text-gray-900">OCR Demo</h1>
 								<p className="text-gray-600">
-									Extract text locally, check backend health, and optionally call
-									the public verify endpoint.
+									Extract text locally, check service availability, and optionally
+									verify the document.
 								</p>
 							</div>
 							<div className="flex flex-wrap items-center gap-2">
@@ -252,7 +252,7 @@ const OCRPage = () => {
 											: "bg-amber-100 text-amber-800"
 									}`}
 								>
-									{healthStatus.loading ? "Checking /health" : healthStatus.ok ? "API healthy" : "API unavailable"}
+									{healthStatus.loading ? "Checking service" : healthStatus.ok ? "Service healthy" : "Service unavailable"}
 								</span>
 								<button
 									type="button"
@@ -276,7 +276,7 @@ const OCRPage = () => {
 												ok: false,
 												message: getErrorMessage(
 													error,
-													"Backend health check failed."
+													"Service availability check failed."
 												),
 											});
 										}
@@ -428,9 +428,8 @@ const OCRPage = () => {
 										</span>
 									</p>
 									<p className="mt-2">
-										Public verify sends `documentData` to `/verify`. Some
-										environments return `503` when blockchain services are not
-										configured.
+										Verification uses the extracted text to check whether the
+										document can be confirmed in the trusted record system.
 									</p>
 								</div>
 							</div>
@@ -447,7 +446,7 @@ const OCRPage = () => {
 								<div className="flex items-center gap-2 text-emerald-700">
 									<ShieldCheck className="h-5 w-5" />
 									<span className="font-semibold">
-										Public verify response received.
+										Verification response received.
 									</span>
 								</div>
 								<pre className="mt-3 overflow-x-auto rounded-lg bg-emerald-950 p-3 text-xs text-emerald-50">

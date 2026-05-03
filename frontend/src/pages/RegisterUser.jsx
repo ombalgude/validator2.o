@@ -103,7 +103,7 @@ export default function RegisterUser() {
 						<h2 className="text-2xl font-bold text-white">Create Your Account</h2>
 						<p className="text-gray-400 mt-2">
 							Choose the workspace role you want at signup. Organization-specific
-							scope becomes active after the related backend access profile is assigned.
+							scope becomes active after the related access profile is assigned.
 						</p>
 					</div>
 

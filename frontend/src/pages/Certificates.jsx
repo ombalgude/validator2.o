@@ -418,7 +418,7 @@ export default function CertificatesPage() {
 							Search and Filter
 						</h2>
 						<p className="text-sm text-slate-500">
-							Query `/certificates` with backend-supported filters and sorting.
+							Search trusted certificate records with filters and sorting.
 						</p>
 					</div>
 				</div>
@@ -688,7 +688,7 @@ export default function CertificatesPage() {
 								Certificate Details
 							</h2>
 							<p className="text-sm text-slate-500">
-								Select a row to query `/certificates/:id`.
+								Select a row to inspect the full certificate record.
 							</p>
 						</div>
 						<ShieldCheck className="h-5 w-5 text-slate-400" />
@@ -778,8 +778,7 @@ export default function CertificatesPage() {
 											Manual Status Update
 										</h3>
 										<p className="text-sm text-slate-500">
-											Submit `PUT /certificates/:id/verify` for manual review or
-											admin and company-admin overrides.
+											Submit a manual review or admin status override.
 										</p>
 									</div>
 
@@ -874,8 +873,8 @@ export default function CertificatesPage() {
 						</div>
 					) : (
 						<div className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-sm text-slate-500">
-							Select a certificate from the table to inspect its backend detail
-							response and, when allowed, submit a manual status update.
+							Select a certificate from the table to inspect its details and,
+							when allowed, submit a manual status update.
 						</div>
 					)}
 				</section>
@@ -887,8 +886,7 @@ export default function CertificatesPage() {
 						Candidate Validation
 					</h2>
 					<p className="text-sm text-slate-500">
-						Use `POST /certificates/validate` to compare a candidate document
-						against trusted records.
+						Compare a candidate document against trusted records.
 					</p>
 				</div>
 
@@ -917,8 +915,8 @@ export default function CertificatesPage() {
 									className="w-full rounded-lg border border-slate-300 px-3 py-2"
 								/>
 								<p className="text-xs text-slate-500">
-									The file is optional for `/certificates/validate`, but when
-									provided it must meet the 10MB and allowed-type rules.
+									The file is optional, but when provided it must meet the 10MB
+									and allowed-type rules.
 								</p>
 							</div>
 
@@ -1003,8 +1001,7 @@ export default function CertificatesPage() {
 								</div>
 							) : (
 								<div className="mt-4 rounded-xl border border-dashed border-slate-300 px-4 py-8 text-sm text-slate-500">
-									Run a validation request to inspect the backend comparison
-									response here.
+									Run a validation check to inspect the comparison results here.
 								</div>
 							)}
 						</div>

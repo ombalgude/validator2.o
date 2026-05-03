@@ -248,7 +248,7 @@ export default function CertificateFormFields({
 							Subjects
 						</h4>
 						<p className="text-sm text-slate-500">
-							At least one subject is required by the backend validation rules.
+							At least one subject is required for certificate validation.
 						</p>
 					</div>
 					<button
