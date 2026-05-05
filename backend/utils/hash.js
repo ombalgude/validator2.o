@@ -1,7 +1,6 @@
 const crypto = require("crypto");
 
 const OMIT_VALUE = Symbol("omit_value");
-
 function normalizeForHash(value) {
     if (value === null || value === undefined) {
         return OMIT_VALUE;

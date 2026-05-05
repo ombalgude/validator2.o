@@ -20,6 +20,7 @@ contract DocumentVerification {
 
     constructor() {
         owner = msg.sender;
+        authorizedIssuers[msg.sender] = true;
     }
 
     modifier onlyOwner() {

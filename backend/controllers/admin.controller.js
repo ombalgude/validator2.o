@@ -1,7 +1,6 @@
 const contract = require("../config/blockchain");
 const generateHash = require("../utils/hash");
 const User = require("../models/User");
-
 const addDocument = async (req, res) => {
     try {
         const { documentData, user_id } = req.body;
@@ -51,24 +50,4 @@ const addDocument = async (req, res) => {
     }
 };
 
-const revokeDocument = async (req, res) => {
-    try {
-        const { hash } = req.body;
-
-        if (!hash) {
-            return res.status(400).json({ message: "No hash provided" });
-        }
-
-        const tx = await contract.revokeDocument(hash);
-        await tx.wait();
-
-        res.json({
-            success: true,
-            txHash: tx.hash
-        });
-
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-};
-module.exports = { addDocument, revokeDocument };
+module.exports = { addDocument };
