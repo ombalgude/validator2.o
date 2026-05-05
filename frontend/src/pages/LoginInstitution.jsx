@@ -74,9 +74,8 @@ export default function LoginInstitution() {
 							Organization Portal
 						</h1>
 						<p className="text-indigo-200 leading-relaxed">
-							Institution, university, and company admins use the same backend
-							auth flow, then land in the workspace their assigned access scope
-							allows.
+							Institution, university, and company admins sign in here, then
+							land in the workspace their assigned access scope allows.
 						</p>
 					</div>
 					<ul className="space-y-4">
@@ -91,7 +90,7 @@ export default function LoginInstitution() {
 					<p className="text-gray-400 mb-8">
 						Sign in with the account you registered for institution, university,
 						or company admin access. Organization scope appears once the related
-						backend profile is assigned.
+						profile is assigned.
 					</p>
 
 					<form onSubmit={submit} className="space-y-6">

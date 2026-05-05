@@ -147,8 +147,8 @@ export default function DashboardPage() {
 				<div>
 					<h1 className="text-3xl font-bold text-slate-900">Admin Dashboard</h1>
 					<p className="text-slate-500">
-						Live certificate metrics, fraud trends, and alert monitoring from
-						the backend admin endpoints.
+						Live certificate metrics, fraud trends, and alert monitoring for
+						administrators.
 					</p>
 				</div>
 				<div className="flex flex-wrap gap-2">
@@ -224,7 +224,7 @@ export default function DashboardPage() {
 										Recent Verifications
 									</h2>
 									<p className="text-sm text-slate-500">
-										Last 10 verification log entries returned by `/dashboard/stats`.
+										Latest verification activity across certificate reviews.
 									</p>
 								</div>
 							</div>
@@ -283,7 +283,7 @@ export default function DashboardPage() {
 								Recent Alerts
 							</h2>
 							<p className="text-sm text-slate-500">
-								Suspicious and fake certificates returned by `/dashboard/alerts`.
+								Suspicious and fake certificates requiring attention.
 							</p>
 							<div className="mt-4 space-y-3">
 								{alerts.length === 0 ? (
@@ -331,7 +331,7 @@ export default function DashboardPage() {
 										Monthly Status Totals
 									</h2>
 									<p className="text-sm text-slate-500">
-										12-month summary from `/dashboard/stats`.
+										12-month summary of certificate status changes.
 									</p>
 								</div>
 								<ArrowUpRight className="h-5 w-5 text-slate-400" />
@@ -381,7 +381,7 @@ export default function DashboardPage() {
 								Institution Trend Leaders
 							</h2>
 							<p className="text-sm text-slate-500">
-								Top institutions returned by `/dashboard/trends` for {period}.
+								Top institutions for {period}.
 							</p>
 							<div className="mt-4 space-y-3">
 								{institutionStats.length === 0 ? (
@@ -435,7 +435,7 @@ export default function DashboardPage() {
 							Daily Trend Buckets
 						</h2>
 						<p className="text-sm text-slate-500">
-							Grouped status counts returned by `/dashboard/trends`.
+							Grouped status counts for the selected reporting period.
 						</p>
 						<div className="mt-4 overflow-x-auto">
 							<table className="min-w-full text-left text-sm">

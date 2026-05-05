@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
 	AlertTriangle,
 	CheckCircle2,
@@ -63,6 +64,8 @@ function formatDateTime(value) {
 }
 
 export default function CertificatesPage() {
+	const location = useLocation();
+	const navigate = useNavigate();
 	const [filters, setFilters] = useState(DEFAULT_FILTERS);
 	const [query, setQuery] = useState(DEFAULT_FILTERS);
 	const [certificates, setCertificates] = useState([]);
@@ -93,6 +96,8 @@ export default function CertificatesPage() {
 	const [manualError, setManualError] = useState('');
 	const [manualSuccess, setManualSuccess] = useState('');
 	const [socketNotice, setSocketNotice] = useState('');
+	const [uploadNotice, setUploadNotice] = useState('');
+	const [newCertificateId, setNewCertificateId] = useState('');
 	const { user, lastStatusUpdate } = useAuth();
 
 	const validationAllowed = canValidateCandidate(user?.role);
@@ -127,6 +132,33 @@ export default function CertificatesPage() {
 	useEffect(() => {
 		fetchCertificates(query);
 	}, [query]);
+
+	useEffect(() => {
+		if (!location.state?.uploadSuccess) {
+			return;
+		}
+
+		const certId = location.state.certificateId || '';
+		const txHash = location.state.blockchainTxHash || '';
+		const blockchainRecorded = location.state.blockchainRecorded || false;
+
+		const certNote = certId
+			? ` Certificate ${certId} is available in the list.`
+			: '';
+		const chainNote = blockchainRecorded && txHash
+			? ` Blockchain TX: ${txHash.slice(0, 18)}…`
+			: '';
+
+		setUploadNotice(
+			`${location.state.message || 'Certificate registered successfully.'}${certNote}${chainNote}`,
+		);
+		setNewCertificateId(certId);
+		navigate(location.pathname, { replace: true, state: {} });
+
+		// Clear highlight after 6 s
+		const timer = setTimeout(() => setNewCertificateId(''), 6000);
+		return () => clearTimeout(timer);
+	}, [location.pathname, location.state, navigate]);
 
 	useEffect(() => {
 		if (!selectedCertificate?.id) {
@@ -372,6 +404,12 @@ export default function CertificatesPage() {
 				</div>
 			) : null}
 
+			{uploadNotice ? (
+				<div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+					{uploadNotice}
+				</div>
+			) : null}
+
 			<section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
 				<div className="mb-4 flex items-center gap-3">
 					<Search className="h-5 w-5 text-slate-400" />
@@ -380,7 +418,7 @@ export default function CertificatesPage() {
 							Search and Filter
 						</h2>
 						<p className="text-sm text-slate-500">
-							Query `/certificates` with backend-supported filters and sorting.
+							Search trusted certificate records with filters and sorting.
 						</p>
 					</div>
 				</div>
@@ -563,7 +601,13 @@ export default function CertificatesPage() {
 											certificates.map((certificate) => (
 												<tr
 													key={certificate.id}
-													className="cursor-pointer border-b border-slate-100 hover:bg-slate-50"
+													className={`cursor-pointer border-b border-slate-100 hover:bg-slate-50 transition-colors ${
+														newCertificateId &&
+														(certificate.certificateId === newCertificateId ||
+															certificate.id === newCertificateId)
+															? 'ring-2 ring-inset ring-emerald-400 bg-emerald-50'
+															: ''
+													}`}
 													onClick={() =>
 														loadCertificateDetails(
 															certificate.id || certificate.certificateId,
@@ -644,7 +688,7 @@ export default function CertificatesPage() {
 								Certificate Details
 							</h2>
 							<p className="text-sm text-slate-500">
-								Select a row to query `/certificates/:id`.
+								Select a row to inspect the full certificate record.
 							</p>
 						</div>
 						<ShieldCheck className="h-5 w-5 text-slate-400" />
@@ -734,8 +778,7 @@ export default function CertificatesPage() {
 											Manual Status Update
 										</h3>
 										<p className="text-sm text-slate-500">
-											Submit `PUT /certificates/:id/verify` for manual review or
-											admin and company-admin overrides.
+											Submit a manual review or admin status override.
 										</p>
 									</div>
 
@@ -830,8 +873,8 @@ export default function CertificatesPage() {
 						</div>
 					) : (
 						<div className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-sm text-slate-500">
-							Select a certificate from the table to inspect its backend detail
-							response and, when allowed, submit a manual status update.
+							Select a certificate from the table to inspect its details and,
+							when allowed, submit a manual status update.
 						</div>
 					)}
 				</section>
@@ -843,8 +886,7 @@ export default function CertificatesPage() {
 						Candidate Validation
 					</h2>
 					<p className="text-sm text-slate-500">
-						Use `POST /certificates/validate` to compare a candidate document
-						against trusted records.
+						Compare a candidate document against trusted records.
 					</p>
 				</div>
 
@@ -873,8 +915,8 @@ export default function CertificatesPage() {
 									className="w-full rounded-lg border border-slate-300 px-3 py-2"
 								/>
 								<p className="text-xs text-slate-500">
-									The file is optional for `/certificates/validate`, but when
-									provided it must meet the 10MB and allowed-type rules.
+									The file is optional, but when provided it must meet the 10MB
+									and allowed-type rules.
 								</p>
 							</div>
 
@@ -959,8 +1001,7 @@ export default function CertificatesPage() {
 								</div>
 							) : (
 								<div className="mt-4 rounded-xl border border-dashed border-slate-300 px-4 py-8 text-sm text-slate-500">
-									Run a validation request to inspect the backend comparison
-									response here.
+									Run a validation check to inspect the comparison results here.
 								</div>
 							)}
 						</div>

@@ -16,6 +16,7 @@ const institutionRoutes = require('./routes/institutions');
 const dashboardRoutes = require('./routes/dashboard');
 const verificationLogRoutes = require('./routes/verificationLogs');
 const accessRoutes = require('./routes/access');
+const universityAdminRequestRoutes = require('./routes/universityAdminRequests');
 
 const getAllowedOrigins = () => {
   const fallbackOrigin = 'http://localhost:3000';
@@ -87,6 +88,7 @@ const createApp = () => {
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/verification-logs', verificationLogRoutes);
   app.use('/api/access', accessRoutes);
+  app.use('/api/university-admin-requests', universityAdminRequestRoutes);
   app.use("/api/admin/blockchain", adminBlockchainRoutes);
   app.use("/api/verify", verifyRoutes);
 

@@ -16,6 +16,7 @@ const {
   normalizeCertificateInput,
 } = require('../utils/certificatePayload');
 const { buildInstitutionScopedFilter, canUserAccessInstitution } = require('../utils/institutionScope');
+const { contract: blockchainContract, isBlockchainAvailable } = require('../config/blockchain');
 
 const ALLOWED_UPLOAD_ROLES = new Set(['admin', 'institution_admin', 'university_admin']);
 const ALLOWED_VERIFY_ROLES = new Set(['admin', 'company_admin']);
@@ -126,6 +127,17 @@ class CertificateService {
 
       const verificationResults = await this.applyAiVerification(certificate, file, fileBuffer);
 
+      // Record on blockchain if available (non-blocking — failure does not abort the upload)
+      const blockchainResult = await this.recordOnBlockchain(certificate);
+      if (blockchainResult.txHash) {
+        certificate.verificationResults = {
+          ...(certificate.verificationResults || {}),
+          blockchainTxHash: blockchainResult.txHash,
+          blockchainRecorded: true,
+        };
+        await certificate.save();
+      }
+
       await this.logVerification(certificate, user, certificate.verificationStatus, {
         ipAddress: requestDetails.ipAddress,
         userAgent: requestDetails.userAgent,
@@ -143,11 +155,40 @@ class CertificateService {
         certificateHash: certificate.certificateHash,
         verificationStatus: certificate.verificationStatus,
         verificationResults,
+        blockchainTxHash: blockchainResult.txHash || null,
+        blockchainRecorded: blockchainResult.recorded,
         message: 'Certificate uploaded and verified successfully',
       };
     } catch (error) {
       console.error('Error in uploadAndVerify:', error);
       throw this.wrapUnexpectedError(error, 'Certificate upload failed');
+    }
+  }
+
+  /**
+   * Attempt to record the certificate hash on the blockchain.
+   * Always resolves — never rejects — so blockchain issues don't block uploads.
+   */
+  async recordOnBlockchain(certificate) {
+    if (!isBlockchainAvailable || !blockchainContract) {
+      return { recorded: false, txHash: null };
+    }
+
+    try {
+      const hash = certificate.certificateHash || certificate.documentHash || '';
+      if (!hash) {
+        return { recorded: false, txHash: null };
+      }
+
+      // Ensure bytes32: prefix with 0x and pad/truncate to 32 bytes
+      const bytes32Hash = '0x' + hash.slice(0, 64).padEnd(64, '0');
+      const tx = await blockchainContract.addDocument(bytes32Hash);
+      await tx.wait();
+      console.log(`Blockchain: certificate ${certificate.certificateId} recorded, tx=${tx.hash}`);
+      return { recorded: true, txHash: tx.hash };
+    } catch (error) {
+      console.error('Blockchain recording failed (upload continues):', error.message);
+      return { recorded: false, txHash: null, error: error.message };
     }
   }
 

@@ -27,13 +27,24 @@ services:
       - "5000:5000"
     environment:
       NODE_ENV: production
+      # Support both key names used in the codebase
       MONGODB_URI: mongodb://admin:password123@mongodb:27017/authenticity-validator?authSource=admin
-      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      MONGODB_URL: mongodb://admin:password123@mongodb:27017/authenticity-validator?authSource=admin
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      JWT_EXPIRE: 7d
       PORT: 5000
       AI_SERVICE_URL: http://ai-services:8001
       MAX_FILE_SIZE: 10485760
       UPLOAD_PATH: /app/uploads
-      FRONTEND_URL: http://localhost:3000,http://localhost
+      # Allow both local dev origin and the nginx proxy origin
+      FRONTEND_URL: http://localhost:3000,http://localhost,http://localhost:80
+      # ── Blockchain (optional) ────────────────────────────────────────────────
+      # Set BLOCKCHAIN_ENABLED=true and supply the three vars below to enable
+      # on-chain certificate recording.  Leave false to run without a node.
+      BLOCKCHAIN_ENABLED: ${BLOCKCHAIN_ENABLED:-false}
+      RPC_URL: ${RPC_URL:-}
+      PRIVATE_KEY: ${PRIVATE_KEY:-}
+      CONTRACT_ADDRESS: ${CONTRACT_ADDRESS:-}
     volumes:
       - backend_uploads:/app/uploads
     depends_on:
@@ -42,7 +53,7 @@ services:
     networks:
       - authenticity-network
 
-  # AI Services (Python)
+  # AI Services (Python/FastAPI)
   ai-services:
     build:
       context: ./ai-services
@@ -59,7 +70,7 @@ services:
     networks:
       - authenticity-network
 
-  # Frontend (Vite)
+  # Frontend (Vite/React)
   frontend:
     build:
       context: ./frontend
@@ -78,7 +89,7 @@ services:
     networks:
       - authenticity-network
 
-  # Redis (for caching)
+  # Redis (for caching / future session store)
   redis:
     image: redis:7-alpine
     container_name: authenticity-validator-redis
@@ -90,7 +101,7 @@ services:
     networks:
       - authenticity-network
 
-  # Nginx (Reverse Proxy)
+  # Nginx Reverse Proxy
   nginx:
     image: nginx:alpine
     container_name: authenticity-validator-nginx

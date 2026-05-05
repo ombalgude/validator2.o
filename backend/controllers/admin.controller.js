@@ -1,6 +1,11 @@
-const contract = require("../config/blockchain");
+const { contract, isBlockchainAvailable } = require("../config/blockchain");
 const generateHash = require("../utils/hash");
 const User = require("../models/User");
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> 41870ca8a6ac56aa4b62c4d4493955a5f551797f
 const addDocument = async (req, res) => {
     try {
         const { documentData, user_id } = req.body;
@@ -18,15 +23,18 @@ const addDocument = async (req, res) => {
             return res.status(400).json({ message: "No target user_id provided" });
         }
 
-        // Local file path instead of Cloudinary URL
         const fileUrl = file.path;
-
         const hash = generateHash(documentData);
         const bytes32Hash = "0x" + hash;
 
-        // 1. Blockchain Transaction
-        const tx = await contract.addDocument(bytes32Hash);
-        await tx.wait();
+        let txHash = null;
+
+        // 1. Blockchain Transaction (only if blockchain is configured)
+        if (isBlockchainAvailable && contract) {
+            const tx = await contract.addDocument(bytes32Hash);
+            await tx.wait();
+            txHash = tx.hash;
+        }
 
         // 2. Update User in MongoDB
         const targetUser = await User.findById(user_id);
@@ -40,8 +48,11 @@ const addDocument = async (req, res) => {
             success: true,
             hash,
             fileUrl,
-            txHash: tx.hash,
-            message: "Document successfully added to blockchain and user profile locally"
+            txHash,
+            blockchainRecorded: isBlockchainAvailable && txHash !== null,
+            message: isBlockchainAvailable
+                ? "Document successfully added to blockchain and user profile"
+                : "Document added to user profile (blockchain not configured)",
         });
 
     } catch (error) {
@@ -50,4 +61,35 @@ const addDocument = async (req, res) => {
     }
 };
 
+<<<<<<< HEAD
 module.exports = { addDocument };
+=======
+const revokeDocument = async (req, res) => {
+    try {
+        const { hash } = req.body;
+
+        if (!hash) {
+            return res.status(400).json({ message: "No hash provided" });
+        }
+
+        if (!isBlockchainAvailable || !contract) {
+            return res.status(503).json({
+                message: "Blockchain is not configured on this server. Set BLOCKCHAIN_ENABLED=true with RPC_URL, PRIVATE_KEY, and CONTRACT_ADDRESS.",
+            });
+        }
+
+        const tx = await contract.revokeDocument(hash);
+        await tx.wait();
+
+        res.json({
+            success: true,
+            txHash: tx.hash,
+        });
+
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+module.exports = { addDocument, revokeDocument };
+>>>>>>> 41870ca8a6ac56aa4b62c4d4493955a5f551797f

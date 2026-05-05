@@ -61,7 +61,7 @@ export function AuthProvider({ children }) {
 		const nextToken = response.data?.token;
 
 		if (!nextToken) {
-			throw new Error("Authentication token missing from response");
+			return response.data;
 		}
 
 		setStoredToken(nextToken);
