@@ -146,7 +146,7 @@ export default function CertificatesPage() {
 			? ` Certificate ${certId} is available in the list.`
 			: '';
 		const chainNote = blockchainRecorded && txHash
-			? ` Blockchain TX: ${txHash.slice(0, 18)}…`
+			? ` Blockchain TX: ${txHash.slice(0, 18)}...`
 			: '';
 
 		setUploadNotice(
@@ -976,6 +976,46 @@ export default function CertificatesPage() {
 											)}
 										</pre>
 									</div>
+
+									{validationResult.aiExtraction ? (
+										<div className="rounded-xl border border-slate-200 bg-white p-4">
+											<p className="font-semibold text-slate-900">AI extraction</p>
+											<p className="mt-2 text-slate-600">
+												Confidence:{' '}
+												{Math.round(validationResult.aiExtraction.confidence || 0)}%
+											</p>
+											{Array.isArray(
+												validationResult.aiExtraction.missingRequiredFields,
+											) &&
+											validationResult.aiExtraction.missingRequiredFields.length > 0 ? (
+												<p className="mt-1 text-amber-700">
+													Missing:{' '}
+													{validationResult.aiExtraction.missingRequiredFields.join(
+														', ',
+													)}
+												</p>
+											) : (
+												<p className="mt-1 text-emerald-700">
+													Required fields were available for comparison.
+												</p>
+											)}
+										</div>
+									) : null}
+
+									{validationResult.blockchainVerification ? (
+										<div className="rounded-xl border border-slate-200 bg-white p-4">
+											<p className="font-semibold text-slate-900">
+												Blockchain verification
+											</p>
+											<p className="mt-2 text-slate-600">
+												{validationResult.blockchainVerification.available
+													? validationResult.blockchainVerification.verified
+														? 'Certificate hash was found on-chain.'
+														: 'Certificate hash was not found on-chain.'
+													: 'Blockchain verification is not configured for this server.'}
+											</p>
+										</div>
+									) : null}
 
 									<div className="rounded-xl border border-slate-200 bg-white p-4">
 										<p className="font-semibold text-slate-900">

@@ -259,4 +259,37 @@ describe('CertificateService', () => {
     assert.equal(result.matchType, null);
     assert.equal(result.trustedCertificate, null);
   });
+
+  test('formatCertificateForResponse does not expose raw OCR text', () => {
+    const service = createService();
+    const response = service.formatCertificateForResponse({
+      _id: 'cert-3',
+      certificateId: 'CERT-789',
+      certificateHash: 'a'.repeat(64),
+      institutionId: null,
+      uploadedBy: null,
+      student: SAMPLE_CERTIFICATE_INPUT.student,
+      college: SAMPLE_CERTIFICATE_INPUT.college,
+      exam: SAMPLE_CERTIFICATE_INPUT.exam,
+      subjects: SAMPLE_CERTIFICATE_INPUT.subjects,
+      summary: SAMPLE_CERTIFICATE_INPUT.summary,
+      issue: { date: new Date('2025-06-01'), serialNo: 'SER-1' },
+      studentName: 'Asha Patil',
+      rollNumber: 'SEAT-101',
+      course: 'B.Tech',
+      issueDate: new Date('2025-06-01'),
+      verificationStatus: 'verified',
+      verificationResults: {
+        ocrConfidence: 90,
+        extractedText: 'private OCR text',
+        filePath: 'uploads/private.pdf',
+      },
+      uploadedAt: new Date('2025-06-02'),
+      originalFileName: 'trusted.pdf',
+    });
+
+    assert.equal(response.verificationResults.ocrConfidence, 90);
+    assert.equal(response.verificationResults.extractedText, undefined);
+    assert.equal(response.verificationResults.filePath, undefined);
+  });
 });

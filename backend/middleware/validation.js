@@ -131,7 +131,17 @@ const validateCertificate = [
 ];
 
 const validateCertificateComparison = [
-  ...certificateContentValidationRules,
+  async (req, res, next) => {
+    if (req.file) {
+      return next();
+    }
+
+    await Promise.all(
+      certificateContentValidationRules.map((validation) => validation.run(req))
+    );
+
+    return handleValidationErrors(req, res, next);
+  },
   handleValidationErrors
 ];
 

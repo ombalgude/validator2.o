@@ -46,6 +46,23 @@ const buildCertificateSummary = (certificate) => ({
   status: certificate.verificationStatus,
 });
 
+const sanitizeVerificationResults = (results = {}) => {
+  if (!results || typeof results !== 'object') {
+    return {};
+  }
+
+  const source = typeof results.toObject === 'function' ? results.toObject() : results;
+  const {
+    extractedText,
+    rawText,
+    filePath,
+    documentPath,
+    ...safeResults
+  } = source;
+
+  return safeResults;
+};
+
 const buildPaginationResult = (page, limit, total) => ({
   page,
   limit,
@@ -76,7 +93,7 @@ class CertificateService {
       message: 'Certificate uploaded successfully',
       certificate: buildCertificateSummary(certificate),
       verificationStatus: certificate.verificationStatus,
-      verificationResults,
+      verificationResults: sanitizeVerificationResults(verificationResults),
     };
   }
 
@@ -154,7 +171,7 @@ class CertificateService {
         certificateId: certificate.certificateId,
         certificateHash: certificate.certificateHash,
         verificationStatus: certificate.verificationStatus,
-        verificationResults,
+        verificationResults: sanitizeVerificationResults(verificationResults),
         blockchainTxHash: blockchainResult.txHash || null,
         blockchainRecorded: blockchainResult.recorded,
         message: 'Certificate uploaded and verified successfully',
@@ -302,12 +319,13 @@ class CertificateService {
 
       const candidate = await this.buildCandidateSnapshot(input, file);
       const trustedMatch = await this.findTrustedCertificateMatch(candidate);
+      const blockchainVerification = await this.verifyCandidateOnBlockchain(candidate);
 
       if (trustedMatch.certificate && !(await this.canAccessCertificate(trustedMatch.certificate, user))) {
         throw createServiceError('Access denied', 403);
       }
 
-      const comparison = this.evaluateCandidateMatch(candidate, trustedMatch);
+      const comparison = this.evaluateCandidateMatch(candidate, trustedMatch, blockchainVerification);
 
       if (trustedMatch.certificate) {
         await this.logVerification(trustedMatch.certificate, user, comparison.verificationStatus, {
@@ -318,6 +336,7 @@ class CertificateService {
           candidateCertificateHash: candidate.certificateHash,
           candidateDocumentHash: candidate.documentHash,
           matchType: comparison.matchType,
+          blockchainVerified: blockchainVerification.verified,
         });
       }
 
@@ -336,6 +355,7 @@ class CertificateService {
           course: candidate.searchFields.course,
           issueDate: candidate.searchFields.issueDate,
         },
+        blockchainVerification,
         trustedCertificate: trustedMatch.certificate
           ? this.formatCertificateForResponse(trustedMatch.certificate)
           : null,
@@ -372,7 +392,6 @@ class CertificateService {
       try {
         const ocrResult = await this.aiService.extractText(file, aiContext);
         results.ocrConfidence = ocrResult.confidence || 0;
-        results.extractedText = ocrResult.text || '';
         results.orchestrator = ocrResult.validation_results
           ? {
               validation_results: ocrResult.validation_results,
@@ -439,7 +458,6 @@ class CertificateService {
       templateMatch: completeResult.template_results?.match_score || 0,
       templateId: completeResult.template_results?.template_id || '',
       anomalies: completeResult.anomaly_results?.anomalies || [],
-      extractedText: completeResult.ocr_results?.text || '',
       recommendations: completeResult.recommendations || [],
       orchestrator: orchestration,
     };
@@ -559,7 +577,7 @@ class CertificateService {
           }
         : null,
       verificationStatus: certificate.verificationStatus,
-      verificationResults: certificate.verificationResults,
+      verificationResults: sanitizeVerificationResults(certificate.verificationResults),
       uploadedBy: certificate.uploadedBy
         ? {
             id: getIdValue(certificate.uploadedBy),
@@ -653,8 +671,46 @@ class CertificateService {
     };
   }
 
-  evaluateCandidateMatch(candidate, trustedMatch) {
+  async verifyCandidateOnBlockchain(candidate) {
+    if (!isBlockchainAvailable || !blockchainContract || !candidate.certificateHash) {
+      return {
+        available: false,
+        verified: false,
+        timestamp: null,
+      };
+    }
+
+    try {
+      const bytes32Hash = `0x${candidate.certificateHash.slice(0, 64).padEnd(64, '0')}`;
+      const result = await blockchainContract.verifyDocument(bytes32Hash);
+
+      return {
+        available: true,
+        verified: Boolean(result[0]),
+        timestamp: Number(result[2]) || null,
+      };
+    } catch (error) {
+      console.error('Blockchain candidate verification failed:', error.message);
+      return {
+        available: true,
+        verified: false,
+        timestamp: null,
+        error: error.message,
+      };
+    }
+  }
+
+  evaluateCandidateMatch(candidate, trustedMatch, blockchainVerification = {}) {
     if (!trustedMatch.certificate) {
+      if (blockchainVerification.verified) {
+        return {
+          isMatch: true,
+          verificationStatus: 'verified',
+          matchType: 'blockchain_hash',
+          message: 'Certificate hash was verified on blockchain',
+        };
+      }
+
       return {
         isMatch: false,
         verificationStatus: 'suspicious',

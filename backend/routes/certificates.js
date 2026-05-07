@@ -11,7 +11,7 @@ const {
   validateCertificate,
   validateCertificateComparison,
 } = require('../middleware/validation');
-const { parseJsonIfNeeded } = require('../utils/certificatePayload');
+const { normalizeCertificateInput, parseJsonIfNeeded } = require('../utils/certificatePayload');
 const { buildInstitutionScopedFilter, canUserAccessInstitution } = require('../utils/institutionScope');
 const AIService = require('../services/ai_service');
 const CertificateService = require('../services/certificate_service');
@@ -343,6 +343,110 @@ const buildCertificateDataFromAiResult = async ({ aiResult, fileBuffer, user }) 
   };
 };
 
+const hasDateValue = (value) => {
+  if (!value) {
+    return false;
+  }
+
+  const parsedDate = value instanceof Date ? value : new Date(value);
+  return !Number.isNaN(parsedDate.getTime());
+};
+
+const mergeCandidateCertificateData = (aiCertificateData = {}, submittedData = {}) => {
+  const aiData = normalizeCertificateInput(aiCertificateData);
+  const manualData = normalizeCertificateInput(submittedData);
+
+  return {
+    certificateId: manualData.certificateId || aiData.certificateId,
+    institutionId: manualData.institutionId || aiData.institutionId,
+    student: {
+      name: manualData.student.name || aiData.student.name,
+      seatNo: manualData.student.seatNo || aiData.student.seatNo,
+      prn: manualData.student.prn || aiData.student.prn,
+      motherName: manualData.student.motherName || aiData.student.motherName,
+    },
+    college: {
+      code: manualData.college.code || aiData.college.code,
+      name: manualData.college.name || aiData.college.name,
+    },
+    exam: {
+      session: manualData.exam.session || aiData.exam.session,
+      year: manualData.exam.year || aiData.exam.year,
+      course: manualData.exam.course || aiData.exam.course,
+      branchCode: manualData.exam.branchCode || aiData.exam.branchCode,
+    },
+    subjects: manualData.subjects.length > 0 ? manualData.subjects : aiData.subjects,
+    summary: {
+      sgpa: manualData.summary.sgpa ?? aiData.summary.sgpa,
+      totalCredits: manualData.summary.totalCredits ?? aiData.summary.totalCredits,
+    },
+    issue: {
+      date: manualData.issue.date || aiData.issue.date,
+      serialNo: manualData.issue.serialNo || aiData.issue.serialNo,
+    },
+  };
+};
+
+const getMissingComparisonFields = (candidateData = {}) => {
+  const normalized = normalizeCertificateInput(candidateData);
+  const firstSubject = normalized.subjects[0] || {};
+  const requiredFields = [
+    ['certificate ID', normalized.certificateId],
+    ['student name', normalized.student.name],
+    ['seat number', normalized.student.seatNo],
+    ['college code', normalized.college.code],
+    ['college name', normalized.college.name],
+    ['course', normalized.exam.course],
+    ['exam session', normalized.exam.session],
+    ['exam year', normalized.exam.year],
+    ['issue date', hasDateValue(normalized.issue.date)],
+    ['subject code', firstSubject.courseCode],
+    ['subject name', firstSubject.courseName],
+  ];
+
+  return requiredFields
+    .filter(([, value]) => !value)
+    .map(([label]) => label);
+};
+
+const extractCandidateDataWithAi = async (req) => {
+  if (!req.file) {
+    return {
+      candidateInput: req.body,
+      aiExtraction: null,
+    };
+  }
+
+  const fileBuffer = req.file.buffer || await fs.readFile(req.file.path);
+  const aiResult = await aiService.extractText(
+    { ...req.file, buffer: fileBuffer },
+    { document_type: 'certificate' }
+  );
+
+  if (!aiResult.success) {
+    const error = new Error(aiResult.error || 'AI service could not extract candidate certificate details.');
+    error.statusCode = 502;
+    throw error;
+  }
+
+  const mappedResult = await buildCertificateDataFromAiResult({
+    aiResult,
+    fileBuffer,
+    user: req.user,
+  });
+  const candidateInput = mergeCandidateCertificateData(mappedResult.certificateData, req.body);
+
+  return {
+    candidateInput,
+    aiExtraction: {
+      confidence: aiResult.confidence || 0,
+      processingTime: aiResult.processing_time || 0,
+      missingRequiredFields: getMissingComparisonFields(candidateInput),
+      warnings: mappedResult.warnings,
+    },
+  };
+};
+
 router.post(
   '/extract',
   auth,
@@ -382,13 +486,6 @@ router.post(
         extraction: {
           confidence: aiResult.confidence || 0,
           processingTime: aiResult.processing_time || 0,
-          structuredData: aiResult.structured_data || {},
-          schemaValidation: aiResult.schema_validation || {},
-          validationResults: aiResult.validation_results || null,
-          integrationRequirements: aiResult.integration_requirements || [],
-          ledgerUpdate: aiResult.ledger_update || [],
-          documentHash: mappedResult.documentHash,
-          rawText: aiResult.text || '',
           missingRequiredFields: mappedResult.missingRequiredFields,
           warnings: mappedResult.warnings,
         },
@@ -453,17 +550,36 @@ router.post(
   validateCertificateComparison,
   async (req, res) => {
     try {
+      const { candidateInput, aiExtraction } = await extractCandidateDataWithAi(req);
+      const missingFields = getMissingComparisonFields(candidateInput);
+
+      if (missingFields.length > 0) {
+        return res.status(422).json({
+          success: false,
+          message: `Candidate certificate data is missing required fields: ${missingFields.join(', ')}.`,
+          missingRequiredFields: missingFields,
+          aiExtraction,
+        });
+      }
+
       const result = await certificateService.compareCandidateCertificate(
-        req.body,
+        candidateInput,
         req.user,
         req.file,
         buildRequestDetails(req)
       );
 
-      res.json(result);
+      res.json({
+        ...result,
+        aiExtraction,
+      });
     } catch (error) {
       console.error('Candidate certificate validation error:', error);
       sendServiceError(res, error, 'Server error during certificate validation');
+    } finally {
+      if (req.file?.path) {
+        fs.unlink(req.file.path).catch(() => {});
+      }
     }
   }
 );
@@ -487,7 +603,7 @@ router.get('/:id', auth, async (req, res) => {
       return res.status(403).json({ message: 'Access denied for this certificate' });
     }
 
-    res.json(certificate);
+    res.json(certificateService.formatCertificateForResponse(certificate));
   } catch (error) {
     console.error('Get certificate error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -514,7 +630,9 @@ router.get('/', auth, async (req, res) => {
     const total = await Certificate.countDocuments(filter);
 
     res.json({
-      certificates,
+      certificates: certificates.map((certificate) =>
+        certificateService.formatCertificateForResponse(certificate)
+      ),
       totalPages: Math.ceil(total / limit),
       currentPage: page,
       total,
