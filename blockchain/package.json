@@ -1,12 +1,13 @@
 {
   "name": "certificate-verifier",
   "version": "0.1.0",
-  "description": "Solana smart contracts for certificate verification",
+  "description": "Blockchain contracts for certificate verification",
   "main": "index.js",
   "scripts": {
     "build": "anchor build",
     "deploy": "anchor deploy",
-    "test": "anchor test",
+    "test": "node scripts/check-contract.js",
+    "test:anchor": "anchor test",
     "test:local": "anchor test --localnet",
     "test:devnet": "anchor test --devnet",
     "clean": "anchor clean"

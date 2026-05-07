@@ -17,6 +17,7 @@ contract DocumentVerification {
     event IssuerAdded(address issuer);
     event IssuerRemoved(address issuer);
     event DocumentAdded(bytes32 hash, address issuer, uint256 timestamp);
+    event DocumentRevoked(bytes32 hash, address issuer, uint256 timestamp);
 
     constructor() {
         owner = msg.sender;
@@ -55,6 +56,17 @@ contract DocumentVerification {
         });
 
         emit DocumentAdded(_hash, msg.sender, block.timestamp);
+    }
+
+    // Revoke document hash
+    function revokeDocument(bytes32 _hash) external onlyAuthorized {
+        Document memory doc = documents[_hash];
+
+        require(doc.timestamp != 0, "Document does not exist");
+        require(doc.issuer == msg.sender || msg.sender == owner, "Only issuer or owner allowed");
+
+        delete documents[_hash];
+        emit DocumentRevoked(_hash, msg.sender, block.timestamp);
     }
 
     // Verify document

@@ -1,11 +1,11 @@
 const { contract, isBlockchainAvailable } = require("../config/blockchain");
 const generateHash = require("../utils/hash");
+const fs = require("fs").promises;
 
 
 const verifyDocument = async (req, res) => {
     try {
         const { documentData } = req.body;
-        const file = req.file;
 
         if (!documentData) {
             return res.status(400).json({ message: "No document data" });
@@ -21,7 +21,6 @@ const verifyDocument = async (req, res) => {
                 issuer: null,
                 timestamp: null,
                 hash,
-                fileUrl: file ? file.path : null,
                 blockchainAvailable: false,
                 message: "Blockchain verification is not configured on this server.",
             });
@@ -34,12 +33,15 @@ const verifyDocument = async (req, res) => {
             issuer: result[1],
             timestamp: Number(result[2]),
             hash,
-            fileUrl: file ? file.path : null,
             blockchainAvailable: true,
         });
 
     } catch (error) {
         res.status(500).json({ message: error.message });
+    } finally {
+        if (req.file?.path) {
+            fs.unlink(req.file.path).catch(() => {});
+        }
     }
 };
 

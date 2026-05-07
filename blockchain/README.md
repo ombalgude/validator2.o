@@ -1,48 +1,47 @@
-# Blockchain Integration (Future Enhancement)
+# Blockchain Integration
 
-This directory will contain Rust smart contracts for blockchain-based certificate verification.
+The running backend integration uses the EVM contract in `contract.sol` through
+`ethers` from `backend/config/blockchain.js`.
 
-## Planned Features
+## Active Flow
 
-- **Smart Contracts**: Solana/Anchor-based smart contracts for immutable certificate storage
-- **Certificate Minting**: NFT-based certificate representation
-- **Verification Logic**: On-chain verification algorithms
-- **Cross-chain Integration**: Support for multiple blockchain networks
+- Upload records call `addDocument(bytes32)` with the trusted certificate hash.
+- Candidate validation calls `verifyDocument(bytes32)` with the candidate
+  certificate hash.
+- Admin blockchain routes are protected by backend JWT auth and the `admin`
+  role.
 
-## Directory Structure
+Set these backend environment variables to enable chain calls:
 
-```
-blockchain/
-├── programs/           # Rust smart contracts
-│   ├── certificate-verifier/  # Main verification program
-│   └── certificate-mint/      # Certificate minting program
-├── tests/             # Integration and unit tests
-│   ├── integration/   # End-to-end tests
-│   └── unit/         # Unit tests for contracts
-└── scripts/          # Deployment and utility scripts
+```env
+BLOCKCHAIN_ENABLED=true
+RPC_URL=<rpc-url>
+PRIVATE_KEY=<issuer-private-key>
+CONTRACT_ADDRESS=<deployed-contract-address>
 ```
 
-## Technology Stack
+When blockchain variables are not configured, backend routes continue to run
+and return `blockchainRecorded: false` or `blockchainVerification.available:
+false`.
 
-- **Language**: Rust
-- **Framework**: Anchor (Solana)
-- **Testing**: Anchor test suite
-- **Deployment**: Solana CLI tools
+## Contract API
 
-## Status
+`contract.sol` exposes:
 
-🚧 **Under Development** - This feature is planned for future implementation as part of Phase 2 of the project.
+- `addIssuer(address issuer)`
+- `removeIssuer(address issuer)`
+- `addDocument(bytes32 hash)`
+- `revokeDocument(bytes32 hash)`
+- `verifyDocument(bytes32 hash)`
 
-## Getting Started (Future)
+Run the active contract/API consistency check with:
 
-1. Install Rust and Solana CLI
-2. Install Anchor framework
-3. Run `anchor build` to compile contracts
-4. Run `anchor test` to execute tests
-5. Deploy to Solana devnet/testnet
+```sh
+npm test
+```
 
-## Integration Points
+## Anchor Program
 
-- **Backend API**: REST endpoints for blockchain operations
-- **Frontend**: Wallet connection and transaction management
-- **AI Services**: Certificate hash verification on-chain
+`programs/lib.rs` and `Anchor.toml` are still present as an experimental Solana
+implementation. They are not the code path used by the current backend.
+Run the Anchor suite with `npm run test:anchor` after installing the Anchor CLI.

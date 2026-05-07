@@ -1,12 +1,11 @@
 const { contract, isBlockchainAvailable } = require("../config/blockchain");
 const generateHash = require("../utils/hash");
 const User = require("../models/User");
-<<<<<<< HEAD
-=======
+const fs = require("fs").promises;
 
-
->>>>>>> 41870ca8a6ac56aa4b62c4d4493955a5f551797f
 const addDocument = async (req, res) => {
+    let storedFileForUser = false;
+
     try {
         const { documentData, user_id } = req.body;
         const file = req.file;
@@ -23,9 +22,13 @@ const addDocument = async (req, res) => {
             return res.status(400).json({ message: "No target user_id provided" });
         }
 
-        const fileUrl = file.path;
         const hash = generateHash(documentData);
         const bytes32Hash = "0x" + hash;
+        const targetUser = await User.findById(user_id);
+
+        if (!targetUser) {
+            return res.status(404).json({ message: "Target user not found" });
+        }
 
         let txHash = null;
 
@@ -37,18 +40,16 @@ const addDocument = async (req, res) => {
         }
 
         // 2. Update User in MongoDB
-        const targetUser = await User.findById(user_id);
-        if (targetUser) {
-            targetUser.myDocuments.push(fileUrl);
-            await targetUser.save({ validateBeforeSave: false });
-        }
+        targetUser.myDocuments.push(file.path);
+        await targetUser.save({ validateBeforeSave: false });
+        storedFileForUser = true;
 
         // 3. Final Response
         res.json({
             success: true,
             hash,
-            fileUrl,
             txHash,
+            documentStored: true,
             blockchainRecorded: isBlockchainAvailable && txHash !== null,
             message: isBlockchainAvailable
                 ? "Document successfully added to blockchain and user profile"
@@ -58,12 +59,13 @@ const addDocument = async (req, res) => {
     } catch (error) {
         console.error("Add Document Error:", error);
         res.status(500).json({ error: error.message });
+    } finally {
+        if (req.file?.path && !storedFileForUser) {
+            fs.unlink(req.file.path).catch(() => {});
+        }
     }
 };
 
-<<<<<<< HEAD
-module.exports = { addDocument };
-=======
 const revokeDocument = async (req, res) => {
     try {
         const { hash } = req.body;
@@ -92,4 +94,3 @@ const revokeDocument = async (req, res) => {
 };
 
 module.exports = { addDocument, revokeDocument };
->>>>>>> 41870ca8a6ac56aa4b62c4d4493955a5f551797f
