@@ -5,7 +5,7 @@ services:
     container_name: authenticity-validator-db
     restart: unless-stopped
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: password123
@@ -61,7 +61,7 @@ services:
     container_name: authenticity-validator-ai
     restart: unless-stopped
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     environment:
       PYTHONPATH: /app
       PYTHONUNBUFFERED: 1
@@ -95,7 +95,7 @@ services:
     container_name: authenticity-validator-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     networks:

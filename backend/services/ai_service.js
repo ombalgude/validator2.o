@@ -6,8 +6,29 @@
 const axios = require('axios');
 const FormData = require('form-data');
 
+const DEFAULT_AI_SERVICE_URL = 'http://127.0.0.1:8001';
+
+const getServiceOrigin = (error) => {
+    const requestUrl = error?.config?.url;
+
+    if (!requestUrl) {
+        return null;
+    }
+
+    try {
+        return new URL(requestUrl).origin;
+    } catch (_error) {
+        return null;
+    }
+};
+
 const extractServiceErrorMessage = (error, fallbackMessage) => {
     const responseData = error?.response?.data;
+    const serviceOrigin = getServiceOrigin(error);
+
+    if (error?.code === 'ECONNREFUSED') {
+        return `AI OCR service is not reachable${serviceOrigin ? ` at ${serviceOrigin}` : ''}. Start the ai-services service and retry.`;
+    }
 
     if (typeof responseData?.detail === 'string' && responseData.detail.trim()) {
         return responseData.detail;
@@ -48,7 +69,7 @@ const extractServiceErrorMessage = (error, fallbackMessage) => {
 
 class AIService {
     constructor() {
-        this.aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8001';
+        this.aiServiceUrl = (process.env.AI_SERVICE_URL || DEFAULT_AI_SERVICE_URL).replace(/\/+$/, '');
         this.timeout = 30000; // 30 seconds timeout
     }
 

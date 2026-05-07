@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import io
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import logging
@@ -12,6 +13,7 @@ import fitz
 import numpy as np
 from PIL import Image
 import pytesseract
+from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -20,6 +22,9 @@ import uvicorn
 CURRENT_DIR = Path(__file__).resolve().parent
 SERVICE_ROOT = CURRENT_DIR.parent
 UTILS_DIR = SERVICE_ROOT / "utils"
+
+load_dotenv(SERVICE_ROOT / ".env")
+load_dotenv()
 
 if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
@@ -34,6 +39,31 @@ from data_helpers import extract_certificate_data, validate_certificate_format
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+WINDOWS_TESSERACT_PATHS = [
+    Path(os.environ.get("PROGRAMFILES", r"C:\Program Files")) / "Tesseract-OCR" / "tesseract.exe",
+    Path(os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)")) / "Tesseract-OCR" / "tesseract.exe",
+    Path.home() / "AppData" / "Local" / "Programs" / "Tesseract-OCR" / "tesseract.exe",
+]
+
+
+def configure_tesseract() -> None:
+    configured_path = os.getenv("TESSERACT_CMD", "").strip()
+    if configured_path:
+        pytesseract.pytesseract.tesseract_cmd = configured_path
+        return
+
+    if os.name != "nt":
+        return
+
+    for tesseract_path in WINDOWS_TESSERACT_PATHS:
+        if tesseract_path.exists():
+            pytesseract.pytesseract.tesseract_cmd = str(tesseract_path)
+            logger.info("Using Tesseract OCR from %s", tesseract_path)
+            return
+
+
+configure_tesseract()
+
 # Initialize FastAPI app
 app = FastAPI(
     title="AI Certificate Verification Service",
@@ -41,10 +71,16 @@ app = FastAPI(
     version="1.0.0"
 )
 
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("AI_ALLOWED_ORIGINS", "http://localhost:5000").split(",")
+    if origin.strip()
+]
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Note: Change "*" to your frontend URL in production
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

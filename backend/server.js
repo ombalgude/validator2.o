@@ -77,9 +77,6 @@ const createApp = () => {
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-  // Static file serving
-  app.use('/uploads', express.static('uploads'));
-
   // Routes
   app.use('/api/auth', authRoutes);
   app.use('/api/users', userRoutes);
@@ -185,13 +182,28 @@ const startServer = async (app = createApp()) => {
   const PORT = process.env.PORT || 5000;
   const { server, io } = createRealtimeServer(app);
 
-  await new Promise((resolve) => {
-    server.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-      resolve();
+  try {
+    await new Promise((resolve, reject) => {
+      server.once('error', reject);
+
+      const handleListening = () => {
+        server.off('error', reject);
+        console.log(`Server running on port ${PORT}`);
+        console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+        resolve();
+      };
+
+      server.listen(PORT, handleListening);
     });
-  });
+  } catch (error) {
+    if (error?.code === 'EADDRINUSE') {
+      console.error(`Port ${PORT} is already in use. Stop the existing backend process or set PORT to a free port.`);
+    } else {
+      console.error('Failed to start server:', error?.message || error);
+    }
+
+    process.exit(1);
+  }
 
   return { app, server, io };
 };
