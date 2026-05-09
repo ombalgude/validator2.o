@@ -1,5 +1,24 @@
 import React from 'react';
 
+function TextField({
+	label,
+	className = '',
+	inputClassName = '',
+	...inputProps
+}) {
+	return (
+		<label className={`space-y-2 ${className}`}>
+			<span className="block text-sm font-medium text-slate-700">
+				{label}
+			</span>
+			<input
+				className={`w-full rounded-lg border border-slate-300 px-3 py-2 ${inputClassName}`}
+				{...inputProps}
+			/>
+		</label>
+	);
+}
+
 export default function CertificateFormFields({
 	title,
 	description = 'Enter the certificate metadata exactly as it appears on the trusted document.',
@@ -85,8 +104,8 @@ export default function CertificateFormFields({
 					Student
 				</h4>
 				<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-					<input
-						className="rounded-lg border border-slate-300 px-3 py-2"
+					<TextField
+						label="Student name"
 						value={values.student.name}
 						onChange={(event) =>
 							onSectionChange('student', 'name', event.target.value)
@@ -95,8 +114,8 @@ export default function CertificateFormFields({
 						disabled={disabled}
 						required
 					/>
-					<input
-						className="rounded-lg border border-slate-300 px-3 py-2"
+					<TextField
+						label="Seat number"
 						value={values.student.seatNo}
 						onChange={(event) =>
 							onSectionChange('student', 'seatNo', event.target.value)
@@ -105,8 +124,8 @@ export default function CertificateFormFields({
 						disabled={disabled}
 						required
 					/>
-					<input
-						className="rounded-lg border border-slate-300 px-3 py-2"
+					<TextField
+						label="PRN"
 						value={values.student.prn}
 						onChange={(event) =>
 							onSectionChange('student', 'prn', event.target.value)
@@ -114,8 +133,8 @@ export default function CertificateFormFields({
 						placeholder="PRN"
 						disabled={disabled}
 					/>
-					<input
-						className="rounded-lg border border-slate-300 px-3 py-2"
+					<TextField
+						label="Mother name"
 						value={values.student.motherName}
 						onChange={(event) =>
 							onSectionChange('student', 'motherName', event.target.value)
@@ -131,8 +150,8 @@ export default function CertificateFormFields({
 					Institution and Exam
 				</h4>
 				<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-					<input
-						className="rounded-lg border border-slate-300 px-3 py-2"
+					<TextField
+						label="College code"
 						value={values.college.code}
 						onChange={(event) =>
 							onSectionChange('college', 'code', event.target.value)
@@ -141,8 +160,8 @@ export default function CertificateFormFields({
 						disabled={disabled}
 						required
 					/>
-					<input
-						className="rounded-lg border border-slate-300 px-3 py-2"
+					<TextField
+						label="College name"
 						value={values.college.name}
 						onChange={(event) =>
 							onSectionChange('college', 'name', event.target.value)
@@ -151,8 +170,8 @@ export default function CertificateFormFields({
 						disabled={disabled}
 						required
 					/>
-					<input
-						className="rounded-lg border border-slate-300 px-3 py-2"
+					<TextField
+						label="Course"
 						value={values.exam.course}
 						onChange={(event) =>
 							onSectionChange('exam', 'course', event.target.value)
@@ -161,8 +180,8 @@ export default function CertificateFormFields({
 						disabled={disabled}
 						required
 					/>
-					<input
-						className="rounded-lg border border-slate-300 px-3 py-2"
+					<TextField
+						label="Branch code"
 						value={values.exam.branchCode}
 						onChange={(event) =>
 							onSectionChange('exam', 'branchCode', event.target.value)
@@ -170,8 +189,8 @@ export default function CertificateFormFields({
 						placeholder="Branch code"
 						disabled={disabled}
 					/>
-					<input
-						className="rounded-lg border border-slate-300 px-3 py-2"
+					<TextField
+						label="Session"
 						value={values.exam.session}
 						onChange={(event) =>
 							onSectionChange('exam', 'session', event.target.value)
@@ -180,8 +199,8 @@ export default function CertificateFormFields({
 						disabled={disabled}
 						required
 					/>
-					<input
-						className="rounded-lg border border-slate-300 px-3 py-2"
+					<TextField
+						label="Year"
 						value={values.exam.year}
 						onChange={(event) =>
 							onSectionChange('exam', 'year', event.target.value)
@@ -198,9 +217,9 @@ export default function CertificateFormFields({
 					Issue and Summary
 				</h4>
 				<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-					<input
+					<TextField
+						label="Issue date"
 						type="date"
-						className="rounded-lg border border-slate-300 px-3 py-2"
 						value={values.issue.date}
 						onChange={(event) =>
 							onSectionChange('issue', 'date', event.target.value)
@@ -208,8 +227,8 @@ export default function CertificateFormFields({
 						disabled={disabled}
 						required
 					/>
-					<input
-						className="rounded-lg border border-slate-300 px-3 py-2"
+					<TextField
+						label="Serial number"
 						value={values.issue.serialNo}
 						onChange={(event) =>
 							onSectionChange('issue', 'serialNo', event.target.value)
@@ -217,10 +236,10 @@ export default function CertificateFormFields({
 						placeholder="Serial number"
 						disabled={disabled}
 					/>
-					<input
+					<TextField
+						label="SGPA"
 						type="number"
 						step="0.01"
-						className="rounded-lg border border-slate-300 px-3 py-2"
 						value={values.summary.sgpa}
 						onChange={(event) =>
 							onSectionChange('summary', 'sgpa', event.target.value)
@@ -228,9 +247,9 @@ export default function CertificateFormFields({
 						placeholder="SGPA"
 						disabled={disabled}
 					/>
-					<input
+					<TextField
+						label="Total credits"
 						type="number"
-						className="rounded-lg border border-slate-300 px-3 py-2"
 						value={values.summary.totalCredits}
 						onChange={(event) =>
 							onSectionChange('summary', 'totalCredits', event.target.value)
@@ -281,8 +300,8 @@ export default function CertificateFormFields({
 								</button>
 							</div>
 							<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-								<input
-									className="rounded-lg border border-slate-300 px-3 py-2"
+								<TextField
+									label="Course code"
 									value={subject.courseCode}
 									onChange={(event) =>
 										onSubjectChange(index, 'courseCode', event.target.value)
@@ -291,8 +310,9 @@ export default function CertificateFormFields({
 									disabled={disabled}
 									required
 								/>
-								<input
-									className="rounded-lg border border-slate-300 px-3 py-2 md:col-span-2"
+								<TextField
+									label="Course name"
+									className="md:col-span-2"
 									value={subject.courseName}
 									onChange={(event) =>
 										onSubjectChange(index, 'courseName', event.target.value)
@@ -301,8 +321,8 @@ export default function CertificateFormFields({
 									disabled={disabled}
 									required
 								/>
-								<input
-									className="rounded-lg border border-slate-300 px-3 py-2"
+								<TextField
+									label="Type"
 									value={subject.type}
 									onChange={(event) =>
 										onSubjectChange(index, 'type', event.target.value)
@@ -310,9 +330,9 @@ export default function CertificateFormFields({
 									placeholder="Type"
 									disabled={disabled}
 								/>
-								<input
+								<TextField
+									label="Credits"
 									type="number"
-									className="rounded-lg border border-slate-300 px-3 py-2"
 									value={subject.credits}
 									onChange={(event) =>
 										onSubjectChange(index, 'credits', event.target.value)
@@ -320,8 +340,8 @@ export default function CertificateFormFields({
 									placeholder="Credits"
 									disabled={disabled}
 								/>
-								<input
-									className="rounded-lg border border-slate-300 px-3 py-2"
+								<TextField
+									label="Grade"
 									value={subject.grade}
 									onChange={(event) =>
 										onSubjectChange(index, 'grade', event.target.value)
@@ -329,9 +349,9 @@ export default function CertificateFormFields({
 									placeholder="Grade"
 									disabled={disabled}
 								/>
-								<input
+								<TextField
+									label="Credit points"
 									type="number"
-									className="rounded-lg border border-slate-300 px-3 py-2"
 									value={subject.creditPoints}
 									onChange={(event) =>
 										onSubjectChange(index, 'creditPoints', event.target.value)
