@@ -11,6 +11,25 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+SPPU_FE_COURSE_NAMES = {
+    "101011": "Engineering Mechanics",
+    "102003": "Systems In Mech. Engg.",
+    "104010": "Basic Electronics Engg.",
+    "107001": "Engineering Mathematics I",
+    "107009": "Engineering Chemistry",
+    "111006": "Workshop",
+    "101007": "Environmental Studies-I",
+    "102012": "Engineering Graphics",
+    "103004": "Basic Electrical Engg.",
+    "107002": "Engineering Physics",
+    "107008": "Engineering Mathematics II",
+    "110005": "Prog. & Problem Solving",
+    "110013": "Project Based Learning",
+    "101014": "Environmental Studies-II",
+    "107015": "Phy.Edu.-Exer.& Field Acti.",
+    "22295": "Democracy, Election And Gov.",
+}
+
 
 def _non_empty_lines(text: str) -> List[str]:
     return [line.strip() for line in (text or "").splitlines() if line.strip()]
@@ -38,6 +57,22 @@ def _parse_date_to_iso(value: str) -> Optional[str]:
 
 def _strip_short_lowercase_tail(value: str) -> str:
     return re.sub(r"\s+[a-z]{1,3}$", "", _clean_field_value(value)).strip()
+
+
+def _normalize_sppu_course_name(course_code: str, course_name: str) -> str:
+    canonical_name = SPPU_FE_COURSE_NAMES.get((course_code or "").upper())
+    if canonical_name:
+        return canonical_name
+
+    cleaned = re.sub(r"^[^A-Za-z0-9]+", "", _clean_field_value(course_name))
+    cleaned = cleaned.title()
+    cleaned = re.sub(r"\bIi\b", "II", cleaned)
+    cleaned = re.sub(r"\bIii\b", "III", cleaned)
+    cleaned = re.sub(r"\bIv\b", "IV", cleaned)
+    cleaned = re.sub(r"\bMathematics\s+1\b", "Mathematics I", cleaned, flags=re.I)
+    cleaned = re.sub(r"\bStudies-1\b", "Studies-I", cleaned, flags=re.I)
+    cleaned = re.sub(r"\bStudies-II\b", "Studies-II", cleaned, flags=re.I)
+    return cleaned
 
 
 def _extract_by_label_proximity(lines: List[str]) -> Dict[str, Optional[str]]:
@@ -201,7 +236,7 @@ def _extract_sppu_marksheet_data(ocr_text: str) -> Dict[str, Any]:
         data["total_credits"] = credits_match.group(1)
 
     subject_pattern = re.compile(
-        r"^\s*(\d{5,6})\s+(.+?)\s+\*?\s*(TH|PR|TW\s*\+\s*PR|TW|AC)\s+([O0]?\d{1,2})\s+([O0]?\d{1,2})\s+([A-Z]{1,2})\s+([O0]?\d{1,3})\s*$",
+        r"^\s*(\d{5,6})\s+(.+?)\s+\*?\s*(TH|PR|TW\s*\+\s*PR|TW|AC)\s+([OQ0]?\d{1,2})\s+([OQ0]?\d{1,2})\s+(AC|AB|FF|[A-FOQ0])\s+([OQ0]?\d{1,3})\s*$",
         re.I,
     )
     loose_subject_pattern = re.compile(
@@ -210,10 +245,179 @@ def _extract_sppu_marksheet_data(ocr_text: str) -> Dict[str, Any]:
     )
 
     def normalize_number_token(value: str) -> str:
-        normalized = value.upper().replace("O", "0")
-        if len(normalized) > 2:
+        normalized = value.upper().replace("O", "0").replace("Q", "0")
+        if len(normalized) > 2 and normalized.startswith("0"):
             normalized = normalized[-2:]
         return normalized.zfill(2) if normalized.isdigit() and len(normalized) < 2 else normalized
+
+    grade_points = {
+        "O": 10,
+        "A": 9,
+        "B": 8,
+        "C": 7,
+        "D": 6,
+        "E": 5,
+        "F": 0,
+    }
+    grade_from_points = {value: key for key, value in grade_points.items()}
+
+    def normalize_grade_token(value: str) -> str:
+        raw = (value or "").strip().upper().strip(" .:-_")
+        if not raw:
+            return ""
+        if raw in {"AC", "AB", "FF"}:
+            return raw
+        if raw in {"0", "00", "O", "OO", "Q"}:
+            return "O"
+        if len(raw) == 1 and raw in grade_points:
+            return raw
+        return ""
+
+    def number_value(value: str) -> Optional[int]:
+        normalized = normalize_number_token(value)
+        return int(normalized) if normalized.isdigit() else None
+
+    def infer_grade_from_points(credits: str, credit_points: str, subject_type: str) -> str:
+        if subject_type == "AC":
+            return "AC"
+
+        earned = number_value(credits)
+        points = number_value(credit_points)
+        if not earned or points is None:
+            return ""
+
+        if points % earned != 0:
+            return ""
+
+        return grade_from_points.get(points // earned, "")
+
+    def repair_credits_from_grade(credits: str, grade: str, credit_points: str) -> str:
+        earned = number_value(credits)
+        points = number_value(credit_points)
+        grade_value = grade_points.get(grade)
+        if not earned or points is None or not grade_value:
+            return credits
+        if earned <= 6 or points % grade_value != 0:
+            return credits
+
+        repaired = points // grade_value
+        if 0 < repaired <= 6:
+            return normalize_number_token(str(repaired))
+        return credits
+
+    def normalize_subject_columns(
+        subject_type: str,
+        total_credits: str,
+        earned_credits: str,
+        grade: str,
+        credit_points: str,
+    ) -> Tuple[str, str, str]:
+        subject_type = subject_type.upper()
+        grade = normalize_grade_token(grade) or infer_grade_from_points(
+            earned_credits, credit_points, subject_type
+        )
+        total = normalize_number_token(total_credits)
+        credits = normalize_number_token(earned_credits)
+        points = normalize_number_token(credit_points)
+
+        if subject_type == "AC":
+            return "00", "AC", "00"
+
+        total_value = number_value(total)
+        credits_value = number_value(credits)
+        if (
+            total_value is not None
+            and 0 < total_value <= 6
+            and (credits_value is None or credits_value == 0 or credits_value > 6)
+        ):
+            credits = total
+
+        credits = repair_credits_from_grade(credits, grade, points)
+        if not grade:
+            grade = infer_grade_from_points(credits, points, subject_type)
+        if grade in grade_points and grade_points[grade] > 0:
+            credits_value = number_value(credits)
+            expected_points = credits_value * grade_points[grade] if credits_value else None
+            if expected_points is not None:
+                points = normalize_number_token(str(expected_points))
+        return credits, grade, points
+
+    def extract_subject_tail(rest: str, subject_type: str) -> Tuple[str, str, str]:
+        tail_match = re.search(
+            r"^\s*([OQ0-9]{1,3})\s+([OQ0-9]{1,3})\s+"
+            r"(AC|AB|FF|[A-FOQ0])\s+([OQ0-9]{1,3})\b",
+            rest,
+            re.I,
+        )
+        if tail_match:
+            total_credits, earned_credits, grade, credit_points = tail_match.groups()
+            return normalize_subject_columns(
+                subject_type, total_credits, earned_credits, grade, credit_points
+            )
+
+        def find_explicit_grade(tokens: List[str]) -> str:
+            for token in tokens:
+                raw = token.upper()
+                if raw in {"AC", "AB", "FF"} or (len(raw) == 1 and raw in "ABCDEFOQ"):
+                    return normalize_grade_token(raw)
+            return ""
+
+        tokens = re.findall(
+            r"AC|AB|FF|[A-FOQ]|[OQ0-9]{1,3}",
+            rest,
+            re.I,
+        )
+        if len(tokens) >= 4:
+            first = number_value(tokens[0])
+            second = number_value(tokens[1])
+            last = number_value(tokens[-1])
+            if first is not None and second is not None and last is not None:
+                return normalize_subject_columns(
+                    subject_type, tokens[0], tokens[1], tokens[2], tokens[-1]
+                )
+
+        number_tokens = [token for token in tokens if number_value(token) is not None]
+        grade = find_explicit_grade(tokens)
+        if len(number_tokens) >= 3:
+            return normalize_subject_columns(
+                subject_type,
+                number_tokens[0],
+                number_tokens[1],
+                grade,
+                number_tokens[-1],
+            )
+
+        if len(number_tokens) == 2:
+            raw_first = number_tokens[0].upper().replace("O", "0").replace("Q", "0")
+            compact_first = normalize_number_token(number_tokens[0])
+            if raw_first.isdigit() and len(raw_first) == 3 and raw_first.startswith("0"):
+                return normalize_subject_columns(
+                    subject_type,
+                    raw_first[:2],
+                    raw_first[-1],
+                    grade,
+                    number_tokens[1],
+                )
+            if compact_first.isdigit() and len(compact_first) == 2 and compact_first[0] == compact_first[1]:
+                return normalize_subject_columns(
+                    subject_type,
+                    compact_first[0],
+                    compact_first[1],
+                    grade,
+                    number_tokens[1],
+                )
+
+            credits, inferred_grade, credit_points = normalize_subject_columns(
+                subject_type,
+                number_tokens[0],
+                number_tokens[0],
+                grade,
+                number_tokens[1],
+            )
+            if inferred_grade:
+                return credits, inferred_grade, credit_points
+
+        return "", grade or ("AC" if subject_type.upper() == "AC" else ""), ""
 
     subjects = []
     for line in lines:
@@ -222,13 +426,16 @@ def _extract_sppu_marksheet_data(ocr_text: str) -> Dict[str, Any]:
         if match:
             course_code, course_name, subject_type, _total_credits, earned_credits, grade, credit_points = match.groups()
             subject_type = re.sub(r"\s+", "", subject_type)
+            credits, grade, credit_points = normalize_subject_columns(
+                subject_type, _total_credits, earned_credits, grade, credit_points
+            )
             subjects.append({
                 "course_code": course_code.upper(),
-                "course_name": _clean_field_value(course_name).title(),
+                "course_name": _normalize_sppu_course_name(course_code, course_name),
                 "type": subject_type.upper(),
-                "credits": normalize_number_token(earned_credits),
-                "grade": grade.upper(),
-                "credit_points": normalize_number_token(credit_points),
+                "credits": credits,
+                "grade": grade,
+                "credit_points": credit_points,
             })
             continue
 
@@ -238,15 +445,14 @@ def _extract_sppu_marksheet_data(ocr_text: str) -> Dict[str, Any]:
 
         course_code, course_name, subject_type, rest = loose_match.groups()
         subject_type = re.sub(r"\s+", "", subject_type)
-        number_tokens = [normalize_number_token(token) for token in re.findall(r"[O0]?\d{1,3}", rest)]
-        grade_match = re.search(r"\b(AC|[ABCDO])\b", rest, re.I)
+        credits, grade, credit_points = extract_subject_tail(rest, subject_type)
         subjects.append({
             "course_code": course_code.upper(),
-            "course_name": _clean_field_value(course_name).title(),
+            "course_name": _normalize_sppu_course_name(course_code, course_name),
             "type": subject_type.upper(),
-            "credits": number_tokens[1] if len(number_tokens) > 1 else "",
-            "grade": grade_match.group(1).upper() if grade_match else "",
-            "credit_points": number_tokens[-1] if number_tokens else "",
+            "credits": credits,
+            "grade": grade,
+            "credit_points": credit_points,
         })
 
     if subjects:
