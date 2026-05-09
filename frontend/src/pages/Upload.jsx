@@ -56,6 +56,31 @@ function getUploadedBlockchainTxHash(result) {
 	return result?.blockchainTxHash || result?.verificationResults?.blockchainTxHash || "";
 }
 
+function getCurrentMissingRequiredFields(values, { requireInstitution = false } = {}) {
+	const firstSubject = values.subjects?.[0] || {};
+	const checks = [
+		["certificate ID", values.certificateId],
+		["student name", values.student?.name],
+		["seat number", values.student?.seatNo],
+		["college code", values.college?.code],
+		["college name", values.college?.name],
+		["course", values.exam?.course],
+		["exam session", values.exam?.session],
+		["exam year", values.exam?.year],
+		["issue date", values.issue?.date],
+		["subject code", firstSubject.courseCode],
+		["subject name", firstSubject.courseName],
+	];
+
+	if (requireInstitution) {
+		checks.unshift(["institution", values.institutionId]);
+	}
+
+	return checks
+		.filter(([, value]) => !String(value ?? "").trim())
+		.map(([label]) => label);
+}
+
 export default function UploadPage() {
 	const [institutions, setInstitutions] = useState([]);
 	const [institutionsLoading, setInstitutionsLoading] = useState(false);
@@ -79,10 +104,17 @@ export default function UploadPage() {
 	const hasInstitutionScope = Boolean(user?.institution?.id || user?.institutionId);
 	const needsInstitutionAssignment = !isAdmin && !hasInstitutionScope;
 	const isImageFile = Boolean(file?.type?.toLowerCase().startsWith("image/"));
-	const missingRequiredFields = extraction?.missingRequiredFields || [];
+	const backendMissingRequiredFields = extraction?.missingRequiredFields || [];
+	const currentMissingRequiredFields = extraction
+		? getCurrentMissingRequiredFields(values, { requireInstitution: isAdmin })
+		: backendMissingRequiredFields;
+	const missingRequiredFields =
+		currentMissingRequiredFields.length > 0
+			? currentMissingRequiredFields
+			: backendMissingRequiredFields;
 	const canRegister =
 		Boolean(file && extraction) &&
-		missingRequiredFields.length === 0 &&
+		currentMissingRequiredFields.length === 0 &&
 		!isExtracting &&
 		!isSubmitting;
 	const extractionResponseClasses = {
@@ -287,9 +319,12 @@ export default function UploadPage() {
 			setExtraction(response.data?.extraction || {});
 
 			if (response.data?.success === false) {
+				const missingFields = response.data?.extraction?.missingRequiredFields || [];
 				const message =
 					response.data?.message ||
-					"AI extraction completed, but required fields are missing.";
+					(missingFields.length > 0
+						? `AI extraction completed, but required fields are missing: ${missingFields.join(", ")}.`
+						: "AI extraction completed, but required fields are missing.");
 				setError(message);
 				setExtractionResponse({
 					type: "warning",
@@ -332,9 +367,9 @@ export default function UploadPage() {
 			return;
 		}
 
-		if (missingRequiredFields.length > 0) {
+		if (currentMissingRequiredFields.length > 0) {
 			setError(
-				`AI extraction is missing required fields: ${missingRequiredFields.join(", ")}.`
+				`Required fields are missing: ${currentMissingRequiredFields.join(", ")}.`
 			);
 			return;
 		}
@@ -595,11 +630,11 @@ export default function UploadPage() {
 
 					<CertificateFormFields
 						title="AI Extracted Details"
-						description="These fields are generated from AI extraction and are locked for upload users."
+						description="Review the extracted fields before registration."
 						values={values}
 						institutions={institutions}
 						showInstitutionField={isAdmin}
-						disabled
+						disabled={isSubmitting}
 						onRootChange={updateRoot}
 						onSectionChange={updateSection}
 						onSubjectChange={updateSubject}

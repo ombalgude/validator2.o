@@ -12,6 +12,34 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _non_empty_lines(text: str) -> List[str]:
+    return [line.strip() for line in (text or "").splitlines() if line.strip()]
+
+
+def _compact_line(line: str) -> str:
+    return re.sub(r"\s+", " ", line or "").strip()
+
+
+def _clean_field_value(value: str) -> str:
+    return _compact_line(value).strip(" .:-_")
+
+
+def _clean_college_name(value: str) -> str:
+    value = _clean_field_value(value)
+    value = re.split(r"\s+\||\s+[=_-]{2,}|\s+COURSE\s+CO\b", value, maxsplit=1, flags=re.I)[0]
+    return _clean_field_value(value)
+
+
+def _parse_date_to_iso(value: str) -> Optional[str]:
+    normalized = _clean_field_value(value).upper()
+    parsed = _parse_date(normalized)
+    return parsed.strftime("%Y-%m-%d") if parsed else None
+
+
+def _strip_short_lowercase_tail(value: str) -> str:
+    return re.sub(r"\s+[a-z]{1,3}$", "", _clean_field_value(value)).strip()
+
+
 def _extract_by_label_proximity(lines: List[str]) -> Dict[str, Optional[str]]:
     """
     Context-aware field extraction.
@@ -21,18 +49,19 @@ def _extract_by_label_proximity(lines: List[str]) -> Dict[str, Optional[str]]:
     """
     LABEL_MAP = {
         "student_name": [
-            "name", "student name", "candidate name", "student's name",
+            "student name", "candidate name", "student's name", "name",
             "this is to certify that", "certify that",
         ],
         "roll_number": [
-            "roll no", "roll number", "reg no", "registration no",
-            "student id", "enrollment no", "enroll no", "id no",
+            "seat no", "roll no", "roll number", "perm. reg. no",
+            "perm reg no", "reg no", "registration no", "student id",
+            "enrollment no", "enroll no", "id no",
         ],
         "institution_name": [
             "university", "college", "institute", "institution", "school",
         ],
         "course": [
-            "course", "programme", "program", "stream",
+            "statement of marks", "exam", "course", "programme", "program", "stream",
         ],
         "degree": [
             "degree", "bachelor", "master", "diploma", "certificate of",
@@ -42,8 +71,7 @@ def _extract_by_label_proximity(lines: List[str]) -> Dict[str, Optional[str]]:
             "date", "issued on", "dated", "date of issue",
         ],
         "grade": [
-            "grade", "gpa", "cgpa", "sgpa", "percentage", "marks", "result",
-            "division", "class",
+            "grade", "percentage", "result", "division", "class",
         ],
     }
 
@@ -52,11 +80,11 @@ def _extract_by_label_proximity(lines: List[str]) -> Dict[str, Optional[str]]:
     def _value_after_label(line: str, label: str) -> Optional[str]:
         """Return text after label + optional separator on the same line."""
         pattern = re.compile(
-            r"(?i)" + re.escape(label) + r"\s*[:\-\u2013\u2014]?\s*(.+)"
+            r"(?i)\b" + re.escape(label) + r"\b\s*[:#.\-\u2013\u2014]*\s*(.+)"
         )
         match = pattern.search(line)
         if match:
-            val = match.group(1).strip().strip(".")
+            val = _clean_field_value(match.group(1))
             return val if len(val) >= 2 else None
         return None
 
@@ -66,25 +94,174 @@ def _extract_by_label_proximity(lines: List[str]) -> Dict[str, Optional[str]]:
             if extracted[field]:
                 continue
             for label in labels:
-                if label in line_lower:
-                    # Try value on the same line
-                    value = _value_after_label(line, label)
-                    if not value:
-                        # Try the next non-empty line
-                        for j in range(i + 1, min(i + 3, len(lines))):
-                            if lines[j].strip():
-                                value = lines[j].strip().strip(".")
-                                break
-                    if value and len(value) >= 2:
-                        extracted[field] = value
-                    break
+                if not re.search(r"\b" + re.escape(label) + r"\b", line_lower):
+                    continue
+
+                if field == "student_name" and label == "name" and re.search(
+                    r"\b(course|college|school|university|mother)\b", line_lower
+                ):
+                    continue
+
+                if field == "course" and re.search(r"\b(course\s+code|course\s+name)\b", line_lower):
+                    continue
+
+                if field == "grade" and "marks/grades" in line_lower:
+                    continue
+
+                # Try value on the same line
+                value = _value_after_label(line, label)
+                if not value:
+                    # Try the next non-empty line
+                    for j in range(i + 1, min(i + 3, len(lines))):
+                        if lines[j].strip():
+                            value = _clean_field_value(lines[j])
+                            break
+                if value and len(value) >= 2:
+                    extracted[field] = value
+                break
 
     return extracted
+
+
+def _extract_sppu_marksheet_data(ocr_text: str) -> Dict[str, Any]:
+    """
+    Extract fields from Savitribai Phule Pune University marksheets.
+    The table-heavy layout needs stricter patterns than the generic parser.
+    """
+    text = ocr_text or ""
+    lines = _non_empty_lines(text)
+    flat_text = _compact_line(text)
+    data: Dict[str, Any] = {}
+
+    for line in lines[:5]:
+        no_match = re.search(r"^\s*No\.?\s*[:#-]?\s*(?:\d+\s*[-/]\s*)?([A-Z0-9]{5,})\b", line, re.I)
+        if no_match:
+            data["certificate_id"] = no_match.group(1).upper()
+            data["serial_no"] = no_match.group(1).upper()
+            break
+
+    seat_match = re.search(r"\bSEAT\s*NO\.?\s*[:#-]?\s*([A-Z0-9_-]{4,})\b", flat_text, re.I)
+    if seat_match:
+        data["roll_number"] = seat_match.group(1).upper()
+
+    prn_match = re.search(r"\bPERM\.?\s*REG\.?\s*NO\.?\s*[:#-]?\s*([A-Z0-9_-]{4,})\b", flat_text, re.I)
+    if prn_match:
+        data["prn"] = prn_match.group(1).upper()
+
+    name_match = re.search(
+        r"\bNAME\s*[^A-Z0-9]{0,8}\s*([A-Z][A-Z\s.'-]{2,}?)(?=\s+MOTHER\b|\s+COLLEGE\b|\s+SEAT\b|\s+PERM\b|$)",
+        flat_text,
+        re.I,
+    )
+    if name_match:
+        data["student_name"] = _clean_field_value(name_match.group(1)).title()
+
+    mother_match = re.search(r"\bMOTHER\s*[^A-Z0-9]{0,8}\s*([A-Z][A-Za-z\s.'-]{1,40}?)(?=\s+COLLEGE\b|\s+COURSE\b|$)", flat_text)
+    if mother_match:
+        data["mother_name"] = _strip_short_lowercase_tail(mother_match.group(1)).title()
+
+    college_match = re.search(
+        r"\bCOLLEGE/SCHOOL\s*[\[{(]*\s*([A-Z0-9O_-]{3,})\s*[\])}]*\s*[-:]?\s*(.+?)(?=\s+(?:COURSE\s+CO\.?|COURSE\s+CODE|SEM\.?\s*::?|FIRST\s+YEAR|DATE\s*:)|$)",
+        flat_text,
+        re.I,
+    )
+    if college_match:
+        data["college_code"] = college_match.group(1).upper()
+        data["institution_code"] = data["college_code"]
+        data["college_name"] = _clean_college_name(college_match.group(2)).title()
+        data["institution_name"] = data["college_name"]
+
+    branch_match = re.search(r"\bBRANCH\s+CODE\s*[:#-]?\s*([A-Z0-9_-]+)\b", flat_text, re.I)
+    if branch_match:
+        data["branch_code"] = branch_match.group(1).upper()
+
+    exam_match = re.search(
+        r"STATEMENT\s+OF\s+MARKS\s*/?\s*GRADES\s+FOR\s+(.+?)\s+EXAM\s*[,.:-]?\s*([A-Z]+\s*/\s*[A-Z]+|[A-Z]+)\s+((?:19|20)\d{2})",
+        flat_text,
+        re.I,
+    )
+    if exam_match:
+        data["course"] = _clean_field_value(exam_match.group(1)).upper()
+        session = re.sub(r"\s*/\s*", "/", exam_match.group(2).upper())
+        data["exam_session"] = f"{session} {exam_match.group(3)}"
+        data["exam_year"] = exam_match.group(3)
+        data["year"] = exam_match.group(3)
+
+    date_match = re.search(r"\bDATE\s*[:#-]?\s*([OQ0-3]?[OQ0-9]{1,2}\s*[A-Z]{3,9}\s*(?:19|20)\d{2})\b", flat_text, re.I)
+    if date_match:
+        data["issue_date"] = _parse_date_to_iso(date_match.group(1))
+
+    sgpa_match = re.search(r"\bSGPA\s*[:#-]?\s*([0-9](?:\.[0-9]+)?|10(?:\.0+)?)\b", flat_text, re.I)
+    if sgpa_match:
+        data["grades"] = {"sgpa": sgpa_match.group(1)}
+        data["summary_sgpa"] = sgpa_match.group(1)
+
+    credits_match = re.search(r"\bTOTAL\s+CREDITS\s+EARNED\s*[:#-]?\s*(\d{1,3})\b", flat_text, re.I)
+    if credits_match:
+        data["total_credits"] = credits_match.group(1)
+
+    subject_pattern = re.compile(
+        r"^\s*(\d{5,6})\s+(.+?)\s+\*?\s*(TH|PR|TW\s*\+\s*PR|TW|AC)\s+([O0]?\d{1,2})\s+([O0]?\d{1,2})\s+([A-Z]{1,2})\s+([O0]?\d{1,3})\s*$",
+        re.I,
+    )
+    loose_subject_pattern = re.compile(
+        r"^\s*\D{0,4}(\d{5,6})\s+(.+?)\s+\*?\s*(TH|PR|TW\s*\+\s*PR|TW|AC)\b(.*)$",
+        re.I,
+    )
+
+    def normalize_number_token(value: str) -> str:
+        normalized = value.upper().replace("O", "0")
+        if len(normalized) > 2:
+            normalized = normalized[-2:]
+        return normalized.zfill(2) if normalized.isdigit() and len(normalized) < 2 else normalized
+
+    subjects = []
+    for line in lines:
+        compact_line = _compact_line(line)
+        match = subject_pattern.match(compact_line)
+        if match:
+            course_code, course_name, subject_type, _total_credits, earned_credits, grade, credit_points = match.groups()
+            subject_type = re.sub(r"\s+", "", subject_type)
+            subjects.append({
+                "course_code": course_code.upper(),
+                "course_name": _clean_field_value(course_name).title(),
+                "type": subject_type.upper(),
+                "credits": normalize_number_token(earned_credits),
+                "grade": grade.upper(),
+                "credit_points": normalize_number_token(credit_points),
+            })
+            continue
+
+        loose_match = loose_subject_pattern.match(compact_line)
+        if not loose_match:
+            continue
+
+        course_code, course_name, subject_type, rest = loose_match.groups()
+        subject_type = re.sub(r"\s+", "", subject_type)
+        number_tokens = [normalize_number_token(token) for token in re.findall(r"[O0]?\d{1,3}", rest)]
+        grade_match = re.search(r"\b(AC|[ABCDO])\b", rest, re.I)
+        subjects.append({
+            "course_code": course_code.upper(),
+            "course_name": _clean_field_value(course_name).title(),
+            "type": subject_type.upper(),
+            "credits": number_tokens[1] if len(number_tokens) > 1 else "",
+            "grade": grade_match.group(1).upper() if grade_match else "",
+            "credit_points": number_tokens[-1] if number_tokens else "",
+        })
+
+    if subjects:
+        data["subjects"] = subjects
+        data["subject_code"] = subjects[0]["course_code"]
+        data["subject_name"] = subjects[0]["course_name"]
+        data["subject"] = subjects[0]["course_name"]
+
+    return {key: value for key, value in data.items() if value not in (None, "", [], {})}
 
 
 def _merge_extractions(
     label_data: Dict[str, Optional[str]],
     regex_data: Dict[str, Any],
+    specialized_data: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Merge label-proximity results (higher confidence) with
@@ -93,6 +270,9 @@ def _merge_extractions(
     merged = dict(regex_data)  # start with regex as base
     for field, value in label_data.items():
         if value:  # label-proximity wins when it found something
+            merged[field] = value
+    for field, value in (specialized_data or {}).items():
+        if value:
             merged[field] = value
     return merged
 
@@ -108,10 +288,11 @@ def extract_certificate_data(ocr_text: str) -> Dict[str, Any]:
         Dictionary with extracted certificate data
     """
     try:
-        lines = [l.strip() for l in (ocr_text or "").splitlines() if l.strip()]
+        lines = _non_empty_lines(ocr_text)
 
         # 1. Label-proximity extraction (context-aware)
         label_data = _extract_by_label_proximity(lines)
+        specialized_data = _extract_sppu_marksheet_data(ocr_text)
 
         # 2. Regex extraction (existing logic, used as fallback)
         cleaned_text = _clean_text(ocr_text)
@@ -123,6 +304,7 @@ def extract_certificate_data(ocr_text: str) -> Dict[str, Any]:
             "degree": None,
             "issue_date": None,
             "grades": {},
+            "subjects": [],
             "confidence": 0.0,
             "extracted_fields": [],
         }
@@ -149,10 +331,10 @@ def extract_certificate_data(ocr_text: str) -> Dict[str, Any]:
         if grades: regex_data["grades"] = grades
 
         # 3. Merge — label-proximity wins, regex fills gaps
-        merged = _merge_extractions(label_data, regex_data)
+        merged = _merge_extractions(label_data, regex_data, specialized_data)
 
         # 4. Recompute extracted_fields and confidence
-        key_fields = ["student_name", "roll_number", "institution_name", "course", "degree"]
+        key_fields = ["student_name", "roll_number", "institution_name", "course", "issue_date"]
         merged["extracted_fields"] = [f for f in key_fields if merged.get(f)]
         merged["confidence"] = round(
             (len(merged["extracted_fields"]) / len(key_fields)) * 100, 2
@@ -187,8 +369,8 @@ def validate_certificate_format(data: Dict[str, Any]) -> Dict[str, Any]:
             "completeness_score": 0.0
         }
         
-        required_fields = ["student_name", "roll_number", "institution_name", "course", "degree"]
-        optional_fields = ["issue_date", "grades"]
+        required_fields = ["student_name", "roll_number", "institution_name", "course", "issue_date"]
+        optional_fields = ["degree", "grades", "subjects"]
         
         # Check required fields
         missing_required = []
@@ -232,11 +414,12 @@ def validate_certificate_format(data: Dict[str, Any]) -> Dict[str, Any]:
 
 def _clean_text(text: str) -> str:
     """Clean and normalize OCR text"""
-    # Remove extra whitespace
-    text = re.sub(r'\s+', ' ', text)
+    # Normalize spacing inside lines but preserve line breaks for field regexes.
+    lines = [re.sub(r'[ \t]+', ' ', line).strip() for line in (text or "").splitlines()]
+    text = "\n".join(line for line in lines if line)
     
     # Remove special characters but keep alphanumeric, spaces, and common punctuation
-    text = re.sub(r'[^\w\s\-.,/()]', '', text)
+    text = re.sub(r'[^\w\s\-.,/():#\[\]]', '', text)
     
     # Normalize case for certain patterns
     text = re.sub(r'\b(UNIVERSITY|COLLEGE|INSTITUTE)\b', lambda m: m.group(1).title(), text, flags=re.IGNORECASE)
@@ -256,6 +439,8 @@ def _extract_student_name(text: str) -> Optional[str]:
         match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
         if match:
             name = match.group(1).strip()
+            if re.search(r"\b(course|type|crd|grd|pts|code)\b", name, re.I):
+                continue
             if len(name) >= 3 and len(name) <= 50:
                 return name.title()
     
@@ -378,6 +563,21 @@ def _extract_grades(text: str) -> Dict[str, str]:
 
 def _parse_date(date_str: str) -> Optional[datetime]:
     """Parse date string into datetime object"""
+    date_str = _compact_line(date_str).upper()
+
+    def normalize_day(match: re.Match) -> str:
+        day_text = match.group(1).replace("O", "0").replace("Q", "0")
+        try:
+            day = int(day_text)
+        except ValueError:
+            return match.group(0)
+        return f"{day:02d} {match.group(2)} {match.group(3)}"
+
+    date_str = re.sub(
+        r"\b([OQ0-3]?[OQ0-9]{1,2})\s*([A-Z]{3,9})\s*((?:19|20)\d{2})\b",
+        normalize_day,
+        date_str,
+    )
     formats = [
         "%d/%m/%Y",
         "%m/%d/%Y", 

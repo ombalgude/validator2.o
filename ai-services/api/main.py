@@ -147,7 +147,7 @@ DESCRIPTION_KEYWORDS = {
 }
 
 SCHEMA_MAP = {
-    "certificate": ["student_name", "roll_number", "institution_name", "course", "degree"],
+    "certificate": ["student_name", "roll_number", "institution_name", "course", "issue_date"],
     "resume": ["candidate_name", "contact", "education", "experience", "skills"],
     "email": ["email_address"],
     "description": ["content_summary", "sentiment_signal"],
@@ -288,7 +288,7 @@ def _build_certificate_fix_it(
 ) -> Optional[Dict[str, Any]]:
     missing_fields = [
         field
-        for field in ("student_name", "roll_number", "institution_name", "course", "degree")
+        for field in ("student_name", "roll_number", "institution_name", "course", "issue_date")
         if not extracted_data.get(field)
     ]
     warnings = list(validation.get("warnings", []))
@@ -315,6 +315,7 @@ def _build_certificate_fix_it(
             "institution_name": extracted_data.get("institution_name") or "",
             "course": extracted_data.get("course") or "",
             "degree": extracted_data.get("degree") or "",
+            "issue_date": extracted_data.get("issue_date") or "",
         },
     }
 
@@ -326,7 +327,7 @@ def _run_certificate_deterministic_validation(text: str, confidence: float) -> D
 
     missing_fields = [
         field
-        for field in ("student_name", "roll_number", "institution_name", "course", "degree")
+        for field in ("student_name", "roll_number", "institution_name", "course", "issue_date")
         if not extracted_data.get(field)
     ]
     score = round((confidence * 0.45) + (completeness * 0.55), 2)
@@ -927,11 +928,27 @@ def _run_tesseract(image: np.ndarray, config: str) -> tuple:
         output_type=pytesseract.Output.DICT,
         config=config,
     )
-    # Reconstruct text from word tokens (same output as image_to_string)
-    words = [
-        w for w in word_data.get("text", []) if str(w).strip()
+    lines: Dict[tuple, List[tuple]] = {}
+    total_words = len(word_data.get("text", []))
+    for index in range(total_words):
+        word = str(word_data["text"][index]).strip()
+        if not word:
+            continue
+
+        key = (
+            word_data.get("page_num", [1] * total_words)[index],
+            word_data.get("block_num", [0] * total_words)[index],
+            word_data.get("par_num", [0] * total_words)[index],
+            word_data.get("line_num", [0] * total_words)[index],
+        )
+        left = word_data.get("left", [index] * total_words)[index]
+        lines.setdefault(key, []).append((left, word))
+
+    reconstructed_lines = [
+        " ".join(word for _left, word in sorted(words, key=lambda item: item[0]))
+        for _key, words in sorted(lines.items(), key=lambda item: item[0])
     ]
-    text = " ".join(words).strip()
+    text = "\n".join(reconstructed_lines).strip()
     return text, word_data
 
 
