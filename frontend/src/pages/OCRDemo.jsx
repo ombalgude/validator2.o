@@ -1,11 +1,9 @@
 import {
 	Check,
 	Copy,
-	FileSearch,
 	FileText,
 	Loader,
 	RefreshCw,
-	ShieldCheck,
 	UploadCloud,
 	XCircle,
 } from "lucide-react";
@@ -21,7 +19,7 @@ function getErrorMessage(error, fallback) {
 	return error?.response?.data?.message || error?.message || fallback;
 }
 
-const OCRPage = () => {
+const OCRDemo = () => {
 	const [imageData, setImageData] = useState(null);
 	const [selectedFileName, setSelectedFileName] = useState("");
 	const [isLoading, setIsLoading] = useState(false);
@@ -34,9 +32,7 @@ const OCRPage = () => {
 		ok: false,
 		message: "Checking service availability...",
 	});
-	const [verifyLoading, setVerifyLoading] = useState(false);
 	const [verifyError, setVerifyError] = useState("");
-	const [verifyResult, setVerifyResult] = useState(null);
 	const [socketNotice, setSocketNotice] = useState("");
 	const workerRef = useRef(null);
 	const { lastStatusUpdate } = useAuth();
@@ -106,7 +102,6 @@ const OCRPage = () => {
 		setIsCopied(false);
 		setStatusText("");
 		setVerifyError("");
-		setVerifyResult(null);
 	}
 
 	function handleCopy() {
@@ -131,7 +126,6 @@ const OCRPage = () => {
 			setOcrResult("");
 			setConfidenceScore(null);
 			setVerifyError("");
-			setVerifyResult(null);
 		};
 		reader.readAsDataURL(file);
 	}
@@ -144,7 +138,6 @@ const OCRPage = () => {
 		setIsLoading(true);
 		setStatusText("Recognizing text...");
 		setVerifyError("");
-		setVerifyResult(null);
 
 		try {
 			const response = await workerRef.current.recognize(imageData);
@@ -159,46 +152,6 @@ const OCRPage = () => {
 			setVerifyError(getErrorMessage(error, "OCR extraction failed."));
 		} finally {
 			setIsLoading(false);
-		}
-	}
-
-	async function handlePublicVerify() {
-		if (!ocrResult.trim()) {
-			setVerifyError("Extract text first before sending public verify data.");
-			return;
-		}
-
-		setVerifyLoading(true);
-		setVerifyError("");
-		setVerifyResult(null);
-
-		try {
-			const response = await publicApi.post("/verify", {
-				documentData: {
-					source: "ocr_demo",
-					fileName: selectedFileName,
-					rawText: ocrResult,
-					confidence: confidenceScore,
-					extractedAt: new Date().toISOString(),
-				},
-			});
-
-			setVerifyResult(response.data);
-		} catch (error) {
-			if (error?.response?.status === 503) {
-				setVerifyError(
-					getErrorMessage(
-						error,
-						"Blockchain verification is unavailable in this environment."
-					)
-				);
-			} else {
-				setVerifyError(
-					getErrorMessage(error, "Verification failed.")
-				);
-			}
-		} finally {
-			setVerifyLoading(false);
 		}
 	}
 
@@ -240,8 +193,7 @@ const OCRPage = () => {
 							<div>
 								<h1 className="text-3xl font-bold text-gray-900">OCR Demo</h1>
 								<p className="text-gray-600">
-									Extract text locally, check service availability, and optionally
-									verify the document.
+									Extract text locally and check service availability.
 								</p>
 							</div>
 							<div className="flex flex-wrap items-center gap-2">
@@ -379,7 +331,7 @@ const OCRPage = () => {
 									) : null}
 								</div>
 
-								<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+								<div className="grid grid-cols-1 gap-3">
 									<Button
 										type="button"
 										className="w-full justify-center bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
@@ -398,24 +350,6 @@ const OCRPage = () => {
 											</>
 										)}
 									</Button>
-									<Button
-										type="button"
-										className="w-full justify-center bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-400 disabled:cursor-not-allowed"
-										onClick={handlePublicVerify}
-										disabled={!ocrResult.trim() || verifyLoading}
-									>
-										{verifyLoading ? (
-											<>
-												<Loader className="animate-spin" />
-												Sending...
-											</>
-										) : (
-											<>
-												<FileSearch />
-												Public Verify
-											</>
-										)}
-									</Button>
 								</div>
 
 								<div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
@@ -427,10 +361,6 @@ const OCRPage = () => {
 												: `${Math.round(confidenceScore)}%`}
 										</span>
 									</p>
-									<p className="mt-2">
-										Verification uses the extracted text to check whether the
-										document can be confirmed in the trusted record system.
-									</p>
 								</div>
 							</div>
 						</div>
@@ -441,19 +371,6 @@ const OCRPage = () => {
 							</div>
 						) : null}
 
-						{verifyResult ? (
-							<div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-								<div className="flex items-center gap-2 text-emerald-700">
-									<ShieldCheck className="h-5 w-5" />
-									<span className="font-semibold">
-										Verification response received.
-									</span>
-								</div>
-								<pre className="mt-3 overflow-x-auto rounded-lg bg-emerald-950 p-3 text-xs text-emerald-50">
-									{JSON.stringify(verifyResult, null, 2)}
-								</pre>
-							</div>
-						) : null}
 					</div>
 				</div>
 			</main>
@@ -462,4 +379,4 @@ const OCRPage = () => {
 	);
 };
 
-export default OCRPage;
+export default OCRDemo;

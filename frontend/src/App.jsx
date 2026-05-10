@@ -7,7 +7,7 @@ import PrivateRoute from "./components/PrivateRoute.jsx";
 import PublicRoute from "./components/PublicRoute.jsx";
 import { AUTH_ROLES } from "./lib/roles.js";
 import Landing from "./pages/Landing.jsx";
-import OCRPage from "./pages/OCRPage.jsx";
+import OCRDemo from "./pages/OCRDemo.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import RegisterUser from "./pages/RegisterUser.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
@@ -28,7 +28,7 @@ function App() {
 	return (
 		<Routes>
 			<Route path="/" element={<Landing />} />
-			<Route path="/demo" element={<OCRPage />} />
+			<Route path="/demo" element={<OCRDemo />} />
 
 			<Route
 				path="/login"
