@@ -99,9 +99,9 @@ To use the validation features in a frontend application:
 ```javascript
 const handleValidation = async (file) => {
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('certificate', file);
     
-    const response = await fetch('/api/certificates/validate-candidate', {
+    const response = await fetch('/api/certificates/validate', {
         method: 'POST',
         body: formData,
         headers: {

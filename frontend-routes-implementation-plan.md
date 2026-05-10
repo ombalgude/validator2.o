@@ -11,7 +11,7 @@
 
 **Auth**
 
-- POST /auth/register public; body: { email, password, fullName }; creates only a normal user; response: { message, token, user }.
+- POST /auth/register public; body: { fullName, email, password, role }; role must be university_admin, institution_admin, or company_admin. Accepted role signups return { message, token, user }; scoped access profiles can be completed later.
 - POST /auth/login public; body: { email, password }; response: { message, token, user }.
 - GET /auth/me private; returns current user with populated institutionId.
 
@@ -46,7 +46,7 @@
 
 **Certificates**
 
-- POST /certificates/verify roles admin|institution_admin|university_admin; multipart/form-data; file field certificate; body should use this shape:
+- POST /certificates/verify roles admin|university_admin; multipart/form-data; file field certificate; body should use this shape:
   json
   {
   "certificateId": "CERT-123",
@@ -59,10 +59,10 @@
   "issue": { "date": "2025-06-01", "serialNo": "SER-1" }
   }
 
-- For institution/university admins, institutionId can be omitted and is taken from the token.
+- For university admins, institutionId can be omitted and is taken from the token.
 - Response from POST /certificates/verify: { message, certificate: { id, certificateId, certificateHash, status } }.
 - POST /certificates/bulk same roles; multipart/form-data; files under certificates; text field records must be a JSON array matching file order 1:1.
-- POST /certificates/validate roles admin|institution_admin|university_admin|company_admin; file field certificate is optional; body uses the same certificate shape except institutionId is not required; response: { success, isMatch, verificationStatus, matchType, message, candidateCertificate, trustedCertificate }.
+- POST /certificates/validate roles institution_admin|company_admin; file field certificate is optional; body uses the same certificate shape except institutionId is not required; response: { success, isMatch, verificationStatus, matchType, message, candidateCertificate, trustedCertificate }.
 - GET /certificates private; query: page, limit, sortBy, sortOrder, status, institutionId, studentName, rollNumber, certificateId, certificateHash, dateFrom, dateTo.
 - GET /certificates/:id private; accepts Mongo \_id or certificateId.
 - PUT /certificates/:id/verify roles admin|company_admin; body: { status, reason?, verificationMethod?, verificationResults? }; response: { message, certificate }.
@@ -81,15 +81,15 @@
 **Health / Blockchain**
 
 - GET /health public.
-- POST /admin/blockchain/add-document optional; body: { documentData }; currently no auth middleware; can return 503 if blockchain config is unavailable.
+- POST /admin/blockchain/add-document optional; admin only; body: { documentData }; records on-chain when blockchain config is available.
 - POST /verify optional; body: { documentData }; public; can return 503 if blockchain config is unavailable.
 
 **Frontend Workflow**
 
-1. Public user flow: register/login -> store JWT -> call GET /auth/me.
+1. Public account flow: register with name, email, password, and one allowed signup role, or login with email/password -> store JWT -> call GET /auth/me.
 2. Admin setup flow: create institution -> create base user -> create role profile under /access/:type.
-3. Institution/university flow: upload trusted certs via /certificates/verify or /certificates/bulk -> list/view via /certificates.
-4. Company review flow: validate candidate document via /certificates/validate -> if needed manually override via /certificates/:id/verify -> inspect /verification-logs.
+3. University/admin flow: upload trusted certs via /certificates/verify or /certificates/bulk -> list/view via /certificates.
+4. Institution/company review flow: validate candidate document via /certificates/validate -> if needed manually override via /certificates/:id/verify -> inspect /verification-logs.
 5. Admin ops flow: use /users, /institutions, /access/_, /dashboard/_.
 
 **Important Caveats**
@@ -102,13 +102,13 @@
 
 - [x] First execution step: create `frontend-routes-implementation-plan.md` in the repo root with this checklist.
 - [x] Limit this pass to the current frontend pages: auth, dashboard, certificates, upload, and OCR demo.
-- [x] Keep `/dashboard` admin-only and keep institution signup public, but clarify that it creates only a normal user account until admin role assignment happens later.
+- [x] Keep `/dashboard` admin-only and keep `/register` public for the three supported self-signup roles.
 
 ## Execution Steps
 
 - [x] Phase 1: add shared frontend infrastructure in `frontend/src` for API access, token persistence, `GET /auth/me` bootstrap, auth state, role helpers, and Socket.IO connection/authentication.
 - [x] Phase 2: update `frontend/src/App.jsx`, layout, and guards so protected routes use shared auth state, `/dashboard` is admin-only, and post-login redirects are role-based.
-- [x] Phase 3: wire `LoginPage`, `LoginInstitution`, `RegisterUser`, and `RegisterInstitution` to the real auth contracts; include `fullName`, store JWT, fetch current user, and adjust institution registration copy to match backend reality.
+- [x] Phase 3: wire the single `LoginPage` and `RegisterUser` auth pages to the real auth contracts; include `fullName`, store JWT, fetch current user, and keep registration to four fields.
 - [x] Phase 4: replace `DashboardPage` mock data with `GET /dashboard/stats`, `GET /dashboard/trends`, and `GET /dashboard/alerts`, including period switching and 403 redirect handling.
 - [x] Phase 5: rebuild `Certificates.jsx` into the main certificate workspace with paginated `GET /certificates`, filters/sort, detail fetch via `GET /certificates/:id`, candidate validation via `POST /certificates/validate`, and manual override via `PUT /certificates/:id/verify` for allowed roles.
 - [x] Phase 6: rework `Upload.jsx` into trusted certificate upload with single `POST /certificates/verify` and bulk `POST /certificates/bulk`, client-side file validation, shared certificate-form serialization, and admin-only institution selection.
@@ -136,6 +136,6 @@
 
 - [x] The plan file name is `frontend-routes-implementation-plan.md` in the repo root.
 - [x] This pass does not add new pages for `/users`, `/access/*`, `/institutions` CRUD, `/verification-logs`, or `/admin/blockchain/add-document`.
-- [x] `RegisterInstitution` remains public but creates only a normal `user`.
+- [x] Duplicate institution-specific login/register pages were removed; only `/login` and `/register` remain public auth routes.
 - [x] `socket.io-client` was added during implementation.
 - [x] Frontend dependencies were installed and `npm run build` now succeeds.

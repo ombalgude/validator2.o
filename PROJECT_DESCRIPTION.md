@@ -50,7 +50,7 @@ The implemented system appears to pursue the following major objectives:
 1. Create a centralized trusted store of certificate records uploaded by authorized institutional actors.
 2. Compare candidate documents against trusted records using deterministic content hashing.
 3. Detect suspicious or fake documents using OCR confidence, anomaly scoring, and image-level tampering heuristics.
-4. Support multiple operational roles such as admins, institution admins, university admins, company admins, and general users.
+4. Support four operational roles: admins, university admins, institution admins, and company admins.
 5. Provide explainable verification outputs rather than a black-box pass/fail response.
 6. Maintain verification logs for traceability and auditability.
 7. Offer optional blockchain integration for immutable document registration and later public verification.
@@ -125,10 +125,8 @@ Its main responsibilities are:
 | --- | --- |
 | `/` | Marketing/landing page |
 | `/demo` | OCR demo page with public verification integration |
-| `/login` | General user login |
-| `/login-institution` | Institution-oriented login UX |
-| `/register` | Regular user registration |
-| `/register-institution` | Institution-oriented registration UX |
+| `/login` | General account login |
+| `/register` | Role account registration |
 | `/dashboard` | Admin analytics dashboard |
 | `/certificates` | Certificate listing, detail view, candidate validation, manual review |
 | `/upload` | Trusted certificate upload for allowed roles |
@@ -139,7 +137,7 @@ Its main responsibilities are:
 - The frontend stores the JWT token locally and rehydrates the session by calling `/api/auth/me`.
 - Socket.IO is used after login to subscribe the client to role/user/institution rooms.
 - The OCR demo uses **client-side Tesseract.js**, which is separate from the server-side Python OCR service.
-- The institution login and institution registration pages are mostly UX variations of the same backend authentication flow; they do not themselves create privileged roles.
+- Public auth is intentionally limited to `/login` and `/register`; registration collects name, email, password, and one of the three self-signup admin roles.
 
 ### 6.2 Backend API
 
@@ -210,15 +208,16 @@ Its main functions are:
 
 ### 6.4 Database Layer
 
-MongoDB is the primary system of record. The main persisted entity groups represented in the application are:
+MongoDB is the primary system of record. The application uses these runtime collections:
 
-- users,
-- institutions,
-- certificates,
-- verification logs,
-- institution admin profiles,
-- university admin profiles,
-- company admin profiles,
+- `users`,
+- `institutions`,
+- `certificates`,
+- `verificationlogs`,
+- `institutionadmins`,
+- `universityadmins`,
+- `companyadmins`,
+- `universityadminrequests`.
 
 The database is initialized in Docker with indexes for common access paths such as:
 
@@ -226,6 +225,8 @@ The database is initialized in Docker with indexes for common access paths such 
 - unique institution code,
 - unique certificate ID,
 - certificate verification status,
+- profile ownership and code uniqueness,
+- request status,
 - and verification log lookups.
 
 ### 6.5 Blockchain Layer
@@ -266,13 +267,12 @@ The core user entity stores:
 - login timestamps,
 - and password change timestamps.
 
-Default roles defined in the backend are:
+Default roles defined in the backend are exactly:
 
 - `admin`
-- `institution_admin`
 - `university_admin`
+- `institution_admin`
 - `company_admin`
-- `user`
 
 ### 7.2 Institution Model
 
@@ -390,7 +390,7 @@ This makes the project suitable for discussing **role-aware trust architectures*
 
 ### 9.1 User Authentication Workflow
 
-1. A user registers or logs in through the frontend.
+1. A user registers through `/register` with name, email, password, and a role, or logs in through `/login` with email and password.
 2. The backend validates credentials and issues a JWT.
 3. The frontend stores the token and calls `/api/auth/me`.
 4. The authenticated session is normalized on the client.
@@ -398,16 +398,16 @@ This makes the project suitable for discussing **role-aware trust architectures*
 
 ### 9.2 Institution Access Provisioning Workflow
 
-1. A normal account is created first.
-2. An admin later creates an access profile under `/api/access/...`.
-3. The backend synchronizes the profile into the user's live role context.
+1. A role-bearing account is created with one of the four supported roles.
+2. An admin later creates or approves the matching access profile when scoped access is needed.
+3. The backend synchronizes the profile into the account's live role context.
 4. Subsequent requests are institution-scoped according to that profile.
 
 ### 9.3 Trusted Certificate Upload Workflow
 
 This is the core issuer-side ingestion path.
 
-1. An admin, institution admin, or university admin uploads a certificate file plus structured metadata.
+1. An admin or university admin uploads a certificate file plus structured metadata.
 2. The backend normalizes the certificate payload.
 3. The system verifies that the user is allowed to upload to the target institution.
 4. The file is stored on disk.

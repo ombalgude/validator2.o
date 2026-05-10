@@ -11,7 +11,7 @@ These diagrams reflect the current repository structure and runtime behavior.
 ```mermaid
 sequenceDiagram
     autonumber
-    actor U as User/Admin/Verifier
+    actor U as Admin/University Admin/Institution Admin/Company Admin
     participant FE as React Frontend
     participant NX as Nginx
     participant BE as Express Backend
@@ -88,7 +88,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    U[User / Admin / Verifier]
+    U[Admin / University Admin / Institution Admin / Company Admin]
     FE[React Frontend]
     OCR[Tesseract.js OCR Demo]
     NX[Nginx Reverse Proxy]
