@@ -22,9 +22,10 @@ const aiService = new AIService();
 
 const DEFAULT_LIST_LIMIT = 10;
 const MAX_LIST_LIMIT = 100;
-const TRUSTED_UPLOAD_ROLES = ['admin', 'institution_admin', 'university_admin'];
-const VALIDATION_ROLES = ['admin', 'institution_admin', 'university_admin', 'company_admin'];
+const TRUSTED_UPLOAD_ROLES = ['admin', 'university_admin'];
+const VALIDATION_ROLES = ['institution_admin', 'company_admin'];
 const MANUAL_VERIFY_ROLES = ['admin', 'company_admin'];
+const INSTITUTION_SCOPED_ROLES = new Set(['institution_admin', 'university_admin']);
 
 const resolveCertificateQuery = (identifier) => {
   const trimmedIdentifier = String(identifier || '').trim();
@@ -101,6 +102,36 @@ const buildRequestDetails = (req) => ({
   ipAddress: req.ip,
   userAgent: req.get('User-Agent'),
 });
+
+const requireVerifiedInstitutionScope = async (req, res, next) => {
+  try {
+    if (!INSTITUTION_SCOPED_ROLES.has(req.user?.role)) {
+      return next();
+    }
+
+    if (!req.user.institutionId) {
+      return res.status(403).json({
+        message: 'Your account must be assigned to an institution before verifying certificates.',
+      });
+    }
+
+    const institution = await Institution.findById(req.user.institutionId).select('isVerified');
+    if (!institution) {
+      return res.status(404).json({ message: 'Assigned institution was not found' });
+    }
+
+    if (!institution.isVerified) {
+      return res.status(403).json({
+        message: 'Your institution must be verified by the main admin before verifying certificates.',
+      });
+    }
+
+    return next();
+  } catch (error) {
+    console.error('Institution verification gate error:', error);
+    return res.status(500).json({ message: 'Server error checking institution verification' });
+  }
+};
 
 const toText = (value) => (value === null || value === undefined ? '' : String(value).trim());
 
@@ -574,6 +605,7 @@ router.post(
   '/extract',
   auth,
   authorize(...TRUSTED_UPLOAD_ROLES),
+  requireVerifiedInstitutionScope,
   uploadSingle,
   async (req, res) => {
     try {
@@ -629,6 +661,7 @@ router.post(
   '/verify',
   auth,
   authorize(...TRUSTED_UPLOAD_ROLES),
+  requireVerifiedInstitutionScope,
   uploadSingle,
   normalizeCertificateRequest,
   validateCertificate,
@@ -652,6 +685,7 @@ router.post(
   '/bulk',
   auth,
   authorize(...TRUSTED_UPLOAD_ROLES),
+  requireVerifiedInstitutionScope,
   uploadMultiple,
   async (req, res) => {
     try {
@@ -669,6 +703,7 @@ router.post(
   '/validate',
   auth,
   authorize(...VALIDATION_ROLES),
+  requireVerifiedInstitutionScope,
   uploadSingle,
   normalizeCertificateComparisonRequest,
   validateCertificateComparison,

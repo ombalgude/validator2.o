@@ -18,9 +18,10 @@ const {
 const { buildInstitutionScopedFilter, canUserAccessInstitution } = require('../utils/institutionScope');
 const { contract: blockchainContract, isBlockchainAvailable } = require('../config/blockchain');
 
-const ALLOWED_UPLOAD_ROLES = new Set(['admin', 'institution_admin', 'university_admin']);
+const ALLOWED_UPLOAD_ROLES = new Set(['admin', 'university_admin']);
 const ALLOWED_VERIFY_ROLES = new Set(['admin', 'company_admin']);
-const ALLOWED_COMPARE_ROLES = new Set(['admin', 'institution_admin', 'university_admin', 'company_admin']);
+const ALLOWED_COMPARE_ROLES = new Set(['institution_admin', 'company_admin']);
+const INSTITUTION_SCOPED_ROLES = new Set(['institution_admin']);
 const VALID_STATUSES = new Set(['verified', 'suspicious', 'fake', 'pending']);
 
 const VERIFY_METHODS = {
@@ -316,6 +317,7 @@ class CertificateService {
   async compareCandidateCertificate(input, user, file = null, requestDetails = {}) {
     try {
       this.ensureRole(ALLOWED_COMPARE_ROLES, user, 'Access denied', 403);
+      await this.ensureVerifiedInstitutionActor(user);
 
       const candidate = await this.buildCandidateSnapshot(input, file);
       const trustedMatch = await this.findTrustedCertificateMatch(candidate);
@@ -501,7 +503,7 @@ class CertificateService {
       return true;
     }
 
-    if (user.role === 'institution_admin' || user.role === 'university_admin') {
+    if (user.role === 'university_admin') {
       return String(user.institutionId || '') === String(institutionId || '');
     }
 
@@ -603,7 +605,7 @@ class CertificateService {
       throw createServiceError('Access denied', 403);
     }
 
-    await this.ensureInstitutionExists(normalizedInput.institutionId);
+    await this.ensureInstitutionCanReceiveTrustedUploads(normalizedInput.institutionId, user);
 
     const fileBuffer = await this.getFileBuffer(file);
     const certificate = new Certificate({
@@ -742,11 +744,35 @@ class CertificateService {
     return normalizedInput;
   }
 
-  async ensureInstitutionExists(institutionId) {
-    const institution = await Institution.findById(institutionId).select('_id');
+  async ensureInstitutionCanReceiveTrustedUploads(institutionId, user) {
+    const institution = await Institution.findById(institutionId).select('_id isVerified');
     if (!institution) {
       throw createServiceError('Institution not found', 404);
     }
+
+    if (user?.role !== 'admin' && !institution.isVerified) {
+      throw createServiceError(
+        'Your institution must be verified by the main admin before verifying certificates.',
+        403
+      );
+    }
+
+    return institution;
+  }
+
+  async ensureVerifiedInstitutionActor(user) {
+    if (!INSTITUTION_SCOPED_ROLES.has(user?.role)) {
+      return null;
+    }
+
+    if (!user.institutionId) {
+      throw createServiceError(
+        'Your account must be assigned to an institution before verifying certificates.',
+        403
+      );
+    }
+
+    return this.ensureInstitutionCanReceiveTrustedUploads(user.institutionId, user);
   }
 
   async findCertificateByIdentifier(identifier) {

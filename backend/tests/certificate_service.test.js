@@ -2,11 +2,13 @@ const assert = require('node:assert/strict');
 const { afterEach, describe, test } = require('node:test');
 const Certificate = require('../models/Certificate');
 const CompanyAdmin = require('../models/company_admin');
+const Institution = require('../models/Institution');
 const CertificateService = require('../services/certificate_service');
 const { computeCertificateHash } = require('../utils/certificatePayload');
 
 const originalCertificateFindOne = Certificate.findOne;
 const originalCompanyAdminFindOne = CompanyAdmin.findOne;
+const originalInstitutionFindById = Institution.findById;
 
 const createService = () => new CertificateService({
   aiService: {
@@ -42,6 +44,7 @@ const createService = () => new CertificateService({
 afterEach(() => {
   Certificate.findOne = originalCertificateFindOne;
   CompanyAdmin.findOne = originalCompanyAdminFindOne;
+  Institution.findById = originalInstitutionFindById;
 });
 
 const SAMPLE_CERTIFICATE_INPUT = {
@@ -123,12 +126,12 @@ describe('CertificateService', () => {
     });
   });
 
-  test('institution-level upload permissions stay limited to the user institution', () => {
+  test('trusted upload permissions stay limited to university admin institution', () => {
     const service = createService();
 
     assert.equal(
       service.canUploadToInstitution(
-        { role: 'institution_admin', institutionId: 'inst-1' },
+        { role: 'university_admin', institutionId: 'inst-1' },
         'inst-1'
       ),
       true
@@ -136,10 +139,66 @@ describe('CertificateService', () => {
 
     assert.equal(
       service.canUploadToInstitution(
-        { role: 'institution_admin', institutionId: 'inst-1' },
+        { role: 'university_admin', institutionId: 'inst-1' },
         'inst-2'
       ),
       false
+    );
+
+    assert.equal(
+      service.canUploadToInstitution(
+        { role: 'institution_admin', institutionId: 'inst-1' },
+        'inst-1'
+      ),
+      false
+    );
+  });
+
+  test('institution-level uploads require main admin verification', async () => {
+    Institution.findById = () => ({
+      select: async () => ({
+        _id: 'inst-1',
+        isVerified: false,
+      }),
+    });
+
+    const service = createService();
+
+    await assert.rejects(
+      () => service.ensureInstitutionCanReceiveTrustedUploads(
+        'inst-1',
+        { role: 'university_admin', institutionId: 'inst-1' }
+      ),
+      /must be verified/
+    );
+
+    const institution = await service.ensureInstitutionCanReceiveTrustedUploads(
+      'inst-1',
+      { role: 'admin' }
+    );
+
+    assert.equal(institution._id, 'inst-1');
+  });
+
+  test('institution-level candidate verification requires main admin verification', async () => {
+    Institution.findById = () => ({
+      select: async () => ({
+        _id: 'inst-1',
+        isVerified: false,
+      }),
+    });
+    Certificate.findOne = async () => {
+      throw new Error('certificate lookup should not run for unverified institutions');
+    };
+
+    const service = createService();
+
+    await assert.rejects(
+      () => service.compareCandidateCertificate(
+        SAMPLE_CERTIFICATE_INPUT,
+        { _id: 'user-1', role: 'institution_admin', institutionId: 'inst-1' }
+      ),
+      /must be verified/
     );
   });
 
@@ -174,13 +233,19 @@ describe('CertificateService', () => {
 
       return null;
     };
+    Institution.findById = () => ({
+      select: async () => ({
+        _id: 'inst-1',
+        isVerified: true,
+      }),
+    });
     service.logVerification = async (_certificate, _user, result) => {
       loggedResult = result;
     };
 
     const result = await service.compareCandidateCertificate(
       SAMPLE_CERTIFICATE_INPUT,
-      { _id: 'admin-1', role: 'admin' }
+      { _id: 'institution-admin-1', role: 'institution_admin', institutionId: 'inst-1' }
     );
 
     assert.equal(result.isMatch, true);
@@ -226,11 +291,17 @@ describe('CertificateService', () => {
 
       return null;
     };
+    Institution.findById = () => ({
+      select: async () => ({
+        _id: 'inst-1',
+        isVerified: true,
+      }),
+    });
     service.logVerification = async () => {};
 
     const result = await service.compareCandidateCertificate(
       SAMPLE_CERTIFICATE_INPUT,
-      { _id: 'admin-1', role: 'admin' }
+      { _id: 'institution-admin-1', role: 'institution_admin', institutionId: 'inst-1' }
     );
 
     assert.equal(certificateHashLookupCount, 1);
@@ -251,7 +322,7 @@ describe('CertificateService', () => {
 
     const result = await service.compareCandidateCertificate(
       SAMPLE_CERTIFICATE_INPUT,
-      { _id: 'admin-1', role: 'admin' }
+      { _id: 'company-admin-1', role: 'company_admin' }
     );
 
     assert.equal(result.isMatch, false);

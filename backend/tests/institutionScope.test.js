@@ -45,9 +45,9 @@ describe('institutionScope helpers', () => {
     });
   });
 
-  test('users without an allowed institution cannot access scoped records', async () => {
+  test('actors without an allowed institution cannot access scoped records', async () => {
     const canAccess = await canUserAccessInstitution(
-      { _id: 'user-1', role: 'user' },
+      { _id: 'user-1', role: 'unknown_role' },
       'inst-1'
     );
 
