@@ -3,7 +3,6 @@ const clearUserAccessState = (user) => {
     return user;
   }
 
-  user.role = 'user';
   user.institutionId = null;
   user.companyName = '';
 

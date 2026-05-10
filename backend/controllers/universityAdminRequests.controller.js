@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const Institution = require('../models/Institution');
 const User = require('../models/User');
-const UniversityAdmin = require('../models/univercity_admin');
+const UniversityAdmin = require('../models/UniversityAdmin');
 const UniversityAdminRequest = require('../models/UniversityAdminRequest');
 
 const VALID_STATUSES = new Set(['pending', 'approved', 'rejected']);
@@ -303,7 +303,7 @@ const rejectUniversityAdminRequest = async (req, res) => {
     }
 
     const user = await User.findById(request.userId);
-    if (user && user.role === 'user') {
+    if (user) {
       user.institutionId = null;
       user.companyName = '';
       user.isActive = false;

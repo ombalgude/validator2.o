@@ -6,10 +6,9 @@
 // User Roles
 const USER_ROLES = {
     ADMIN: 'admin',
-    INSTITUTION_ADMIN: 'institution_admin',
     UNIVERSITY_ADMIN: 'university_admin',
-    COMPANY_ADMIN: 'company_admin',
-    USER: 'user'
+    INSTITUTION_ADMIN: 'institution_admin',
+    COMPANY_ADMIN: 'company_admin'
 };
 
 // Verification Status
@@ -83,6 +82,10 @@ const COLLECTIONS = {
     USERS: 'users',
     INSTITUTIONS: 'institutions',
     CERTIFICATES: 'certificates',
+    COMPANY_ADMINS: 'companyadmins',
+    INSTITUTION_ADMINS: 'institutionadmins',
+    UNIVERSITY_ADMINS: 'universityadmins',
+    UNIVERSITY_ADMIN_REQUESTS: 'universityadminrequests',
     VERIFICATION_LOGS: 'verificationlogs'
 };
 

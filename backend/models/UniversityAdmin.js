@@ -1,8 +1,6 @@
 const mongoose = require('mongoose');
-const User = require("../models/User.js");
-const Institution = require("../models/Institution.js");
-const CompanyAdmin = require("../models/company_admin.js");
-const InstitutionAdmin = require("../models/Institution_admin.js");
+require('./User');
+require('./Institution');
 
 const UniversityAdminSchema = new mongoose.Schema(
   {
@@ -41,7 +39,7 @@ const UniversityAdminSchema = new mongoose.Schema(
     },
     permissions: {
       type: [String],
-      default: ['upload_certificates', 'view_own_certificates', 'manage_university_records'],
+      default: ['upload_certificates', 'register_certificates', 'view_own_certificates'],
     },
     canApproveInstitutionAdmins: {
       type: Boolean,

@@ -1,15 +1,16 @@
 const mongoose = require('mongoose');
-const Institution = require("../models/Institution.js");
-const CompanyAdmin = require("../models/company_admin.js");
-const InstitutionAdmin = require("../models/Institution_admin.js");
-const UniversityAdmin = require("../models/univercity_admin.js");
 
 const ROLE_PERMISSIONS = {
-  admin: ['manage_users', 'manage_institutions', 'manage_certificates', 'verify_certificates', 'view_reports'],
-  institution_admin: ['upload_certificates', 'view_own_certificates', 'manage_institution_users'],
-  university_admin: ['upload_certificates', 'view_own_certificates', 'manage_university_records'],
-  company_admin: ['verify_certificates', 'view_verification_logs'],
-  user: ['view_profile'],
+  admin: [
+    'manage_university_admins',
+    'manage_institution_admins',
+    'manage_company_admins',
+    'upload_certificates',
+    'view_reports',
+  ],
+  university_admin: ['upload_certificates', 'register_certificates', 'view_own_certificates'],
+  institution_admin: ['upload_candidate_certificates', 'validate_certificates', 'view_own_certificates'],
+  company_admin: ['upload_candidate_certificates', 'validate_certificates', 'view_verification_logs'],
 };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -40,7 +41,7 @@ const UserSchema = new mongoose.Schema(
     role: {
       type: String,
       enum: Object.keys(ROLE_PERMISSIONS),
-      default: 'user',
+      default: 'company_admin',
       index: true,
     },
     institutionId: {
@@ -88,7 +89,7 @@ const UserSchema = new mongoose.Schema(
 
 UserSchema.pre('validate', function setDefaultPermissions(next) {
   if (this.isModified('role') || !Array.isArray(this.permissions) || this.permissions.length === 0) {
-    this.permissions = [...(ROLE_PERMISSIONS[this.role] || ROLE_PERMISSIONS.user)];
+    this.permissions = [...(ROLE_PERMISSIONS[this.role] || ROLE_PERMISSIONS.company_admin)];
   }
 
   next();

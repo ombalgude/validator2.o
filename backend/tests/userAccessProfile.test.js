@@ -13,7 +13,7 @@ describe('userAccessProfile helpers', () => {
     clearUserAccessState(user);
 
     assert.deepEqual(user, {
-      role: 'user',
+      role: 'company_admin',
       institutionId: null,
       companyName: '',
     });
@@ -45,7 +45,7 @@ describe('userAccessProfile helpers', () => {
     });
   });
 
-  test('inactive profiles leave the user as a plain user', () => {
+  test('inactive profiles clear scope while preserving the admin role', () => {
     const user = {
       role: 'institution_admin',
       institutionId: 'inst-1',
@@ -57,7 +57,7 @@ describe('userAccessProfile helpers', () => {
     } }, { isActive: false });
 
     assert.deepEqual(user, {
-      role: 'user',
+      role: 'institution_admin',
       institutionId: null,
       companyName: '',
     });

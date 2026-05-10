@@ -41,7 +41,7 @@ const CompanyAdminSchema = new mongoose.Schema(
     },
     permissions: {
       type: [String],
-      default: ['verify_certificates', 'view_verification_logs'],
+      default: ['upload_candidate_certificates', 'validate_certificates', 'view_verification_logs'],
     },
     isActive: {
       type: Boolean,

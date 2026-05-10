@@ -1,10 +1,8 @@
 const mongoose = require('mongoose');
 const { HASH_REGEX } = require('../utils/certificatePayload');
-const User = require("../models/User.js");
-const Institution = require("../models/Institution.js");
-const CompanyAdmin = require("../models/company_admin.js");
-const InstitutionAdmin = require("../models/Institution_admin.js");
-const UniversityAdmin = require("../models/univercity_admin.js");
+require("./Certificate");
+require("./User");
+require("./Institution");
 
 const VerificationLogSchema = new mongoose.Schema(
   {

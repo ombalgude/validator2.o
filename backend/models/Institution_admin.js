@@ -43,7 +43,7 @@ const InstitutionAdminSchema = new mongoose.Schema(
     },
     permissions: {
       type: [String],
-      default: ['upload_certificates', 'view_own_certificates', 'manage_institution_users'],
+      default: ['upload_candidate_certificates', 'validate_certificates', 'view_own_certificates'],
     },
     isActive: {
       type: Boolean,
