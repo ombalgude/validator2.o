@@ -384,7 +384,7 @@ export default function CertificatesPage() {
 					<h1 className="text-3xl font-bold text-slate-900">Certificates</h1>
 					<p className="text-slate-500">
 						Browse trusted records, validate candidate documents, and review
-						live status updates for your {formatRoleLabel(user?.role || 'user')}{' '}
+						live status updates for your {formatRoleLabel(user?.role || 'workspace')}{' '}
 						access.
 					</p>
 				</div>
@@ -1048,8 +1048,8 @@ export default function CertificatesPage() {
 					</div>
 				) : (
 					<div className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">
-						Candidate validation is available to admins, institution admins,
-						university admins, and company admins. Your current role can still
+						Candidate validation is available to institution admins and
+						company admins. Your current role can still
 						browse certificate records above.
 					</div>
 				)}

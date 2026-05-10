@@ -144,8 +144,8 @@ export default function LoginPage() {
 							Unlock the Power of Trust.
 						</h1>
 						<p className="text-indigo-200 leading-relaxed">
-							Use the same authentication flow across users, company admins, and
-							institution or university admin teams.
+							Use the same authentication flow across company, institution, and
+							university admin teams.
 						</p>
 					</div>
 					<ul className="space-y-4">

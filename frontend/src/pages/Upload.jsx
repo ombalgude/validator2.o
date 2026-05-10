@@ -101,8 +101,11 @@ export default function UploadPage() {
 
 	const isAdmin = user?.role === "admin";
 	const uploadAllowed = canUploadTrustedCertificates(user?.role);
+	const isInstitutionScoped = user?.role === "university_admin";
 	const hasInstitutionScope = Boolean(user?.institution?.id || user?.institutionId);
 	const needsInstitutionAssignment = !isAdmin && !hasInstitutionScope;
+	const needsInstitutionVerification =
+		isInstitutionScoped && hasInstitutionScope && user?.institution?.isVerified !== true;
 	const isImageFile = Boolean(file?.type?.toLowerCase().startsWith("image/"));
 	const backendMissingRequiredFields = extraction?.missingRequiredFields || [];
 	const currentMissingRequiredFields = extraction
@@ -115,6 +118,8 @@ export default function UploadPage() {
 	const canRegister =
 		Boolean(file && extraction) &&
 		currentMissingRequiredFields.length === 0 &&
+		!needsInstitutionAssignment &&
+		!needsInstitutionVerification &&
 		!isExtracting &&
 		!isSubmitting;
 	const extractionResponseClasses = {
@@ -291,6 +296,17 @@ export default function UploadPage() {
 			return;
 		}
 
+		if (needsInstitutionVerification) {
+			const message =
+				"Your institution must be verified by the main admin before verifying certificates.";
+			setError(message);
+			setExtractionResponse({
+				type: "error",
+				message,
+			});
+			return;
+		}
+
 		setIsExtracting(true);
 		setError("");
 		setResult(null);
@@ -376,6 +392,11 @@ export default function UploadPage() {
 
 		if (needsInstitutionAssignment) {
 			setError("Your account must be assigned to an institution before uploading certificates.");
+			return;
+		}
+
+		if (needsInstitutionVerification) {
+			setError("Your institution must be verified by the main admin before verifying certificates.");
 			return;
 		}
 
@@ -480,6 +501,16 @@ export default function UploadPage() {
 					<span>
 						Your account needs an institution assignment before this upload can
 						be registered.
+					</span>
+				</div>
+			) : null}
+
+			{needsInstitutionVerification ? (
+				<div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+					<AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+					<span>
+						{user?.institution?.name || "Your university"} is waiting for main
+						admin verification before certificate verification is enabled.
 					</span>
 				</div>
 			) : null}

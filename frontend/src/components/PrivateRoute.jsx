@@ -1,7 +1,7 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
 import useAuth from "../hooks/useAuth";
-import { getDefaultRouteForRole } from "../lib/roles";
+import { getDefaultRouteForRole, isKnownRole } from "../lib/roles";
 
 export default function PrivateRoute({ children, roles = [] }) {
 	const { isAuthenticated, isBootstrapping, user } = useAuth();
@@ -15,6 +15,10 @@ export default function PrivateRoute({ children, roles = [] }) {
 	}
 
 	if (!isAuthenticated) {
+		return <Navigate to="/login" replace />;
+	}
+
+	if (!isKnownRole(user?.role)) {
 		return <Navigate to="/login" replace />;
 	}
 

@@ -85,12 +85,12 @@ export default function Landing()
 								</Button>
 							</Link>
 							<Link
-								to="/login-institution"
+								to="/login"
 								className="inline-block"
 							>
 								<Button className="flex items-center gap-2 px-8 py-4 bg-white text-indigo-600 border border-indigo-300 text-lg font-semibold rounded-xl shadow-lg hover:bg-indigo-50 transition-all duration-300 transform hover:-translate-y-1 hover:scale-105">
 									<University className="w-6 h-6" />
-									Institution Portal
+									Admin Sign In
 								</Button>
 							</Link>
 						</div>

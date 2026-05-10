@@ -10,6 +10,7 @@ import {
 } from "../lib/auth-storage";
 import { SOCKET_URL } from "../lib/config";
 import { normalizeUser } from "../lib/normalizers";
+import { isKnownRole } from "../lib/roles";
 
 export const AuthContext = createContext(null);
 
@@ -119,7 +120,7 @@ export function AuthProvider({ children }) {
 	}, []);
 
 	useEffect(() => {
-		if (!token || !user?.id) {
+		if (!token || !user?.id || !isKnownRole(user?.role)) {
 			if (socketRef.current) {
 				socketRef.current.disconnect();
 				socketRef.current = null;
@@ -162,7 +163,7 @@ export function AuthProvider({ children }) {
 				token,
 				user,
 				isBootstrapping,
-				isAuthenticated: Boolean(token && user?.id),
+				isAuthenticated: Boolean(token && user?.id && isKnownRole(user?.role)),
 				lastStatusUpdate,
 				login,
 				register,

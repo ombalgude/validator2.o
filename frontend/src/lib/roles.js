@@ -1,13 +1,17 @@
+export const AUTH_ROLES = [
+	"admin",
+	"university_admin",
+	"institution_admin",
+	"company_admin",
+];
+
 export const TRUSTED_UPLOAD_ROLES = [
 	"admin",
-	"institution_admin",
 	"university_admin",
 ];
 
 export const CANDIDATE_VALIDATION_ROLES = [
-	"admin",
 	"institution_admin",
-	"university_admin",
 	"company_admin",
 ];
 
@@ -18,19 +22,19 @@ export const MANUAL_STATUS_UPDATE_ROLES = [
 
 export const SIGNUP_ROLE_OPTIONS = [
 	{
-		value: "institution_admin",
-		label: "Institution Admin",
-		description: "Trusted upload access activates after institution assignment.",
-	},
-	{
 		value: "university_admin",
 		label: "University Admin",
-		description: "University access activates after main admin approval.",
+		description: "University workspace access can be scoped after signup.",
+	},
+	{
+		value: "institution_admin",
+		label: "Institution Admin",
+		description: "Institution workspace access can be scoped after signup.",
 	},
 	{
 		value: "company_admin",
 		label: "Company Admin",
-		description: "Validation and review access activates after company assignment.",
+		description: "Company access details can be completed after signup.",
 	},
 ];
 
@@ -39,17 +43,25 @@ function hasInstitutionScope(user) {
 }
 
 export function getDefaultRouteForRole(role, user = null) {
+	if (!isKnownRole(role)) {
+		return "/login";
+	}
+
 	switch (role) {
 		case "admin":
 			return "/dashboard";
-		case "institution_admin":
 		case "university_admin":
 			return hasInstitutionScope(user) ? "/upload" : "/certificates";
+		case "institution_admin":
 		case "company_admin":
-		case "user":
-		default:
 			return "/certificates";
+		default:
+			return "/login";
 	}
+}
+
+export function isKnownRole(role) {
+	return AUTH_ROLES.includes(role);
 }
 
 export function canAccessDashboard(role) {
@@ -57,6 +69,10 @@ export function canAccessDashboard(role) {
 }
 
 export function canManageUniversityAdminApprovals(role) {
+	return role === "admin";
+}
+
+export function canManageInstituteApprovals(role) {
 	return role === "admin";
 }
 

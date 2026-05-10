@@ -1,6 +1,6 @@
 const { body, validationResult } = require('express-validator');
 const { normalizeCertificateInput } = require('../utils/certificatePayload');
-const SELF_SIGNUP_ROLES = ['institution_admin', 'university_admin', 'company_admin'];
+const SELF_SIGNUP_ROLES = ['university_admin', 'institution_admin', 'company_admin'];
 
 const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
@@ -60,6 +60,10 @@ const buildNormalizedCertificateBody = (body) => ({
 });
 
 const validateUserRegistration = [
+  body('fullName')
+    .trim()
+    .notEmpty()
+    .withMessage('Name is required'),
   body('email')
     .isEmail()
     .normalizeEmail()
@@ -68,7 +72,9 @@ const validateUserRegistration = [
     .isLength({ min: 8 })
     .withMessage('Password must be at least 8 characters long'),
   body('role')
-    .optional()
+    .exists()
+    .withMessage('Please choose a signup role')
+    .bail()
     .isIn(SELF_SIGNUP_ROLES)
     .withMessage('Please choose a valid signup role'),
   handleValidationErrors

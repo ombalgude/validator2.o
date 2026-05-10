@@ -1,14 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import Button from "../components/Button";
-import UniversityAdminRequestFields, {
-	createUniversityAdminRequestDetails,
-	parseSubmittedDocuments,
-} from "../components/UniversityAdminRequestFields";
-import { ParticleCanvas } from "../components/ParticalCanvas";
 import {
 	AlertTriangle,
-	CheckCircle,
 	Loader,
 	Lock,
 	Mail,
@@ -16,6 +9,8 @@ import {
 	User,
 	UserPlus,
 } from "lucide-react";
+import Button from "../components/Button";
+import { ParticleCanvas } from "../components/ParticalCanvas";
 import useAuth from "../hooks/useAuth";
 import { getDefaultRouteForRole, SIGNUP_ROLE_OPTIONS } from "../lib/roles";
 
@@ -24,54 +19,27 @@ function getErrorMessage(error, fallback) {
 }
 
 export default function RegisterUser() {
-	const [fullName, setFullName] = useState("");
+	const [name, setName] = useState("");
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
-	const [role, setRole] = useState("company_admin");
-	const [approvalDetails, setApprovalDetails] = useState(
-		createUniversityAdminRequestDetails(),
-	);
+	const [role, setRole] = useState("university_admin");
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
-	const [pendingNotice, setPendingNotice] = useState("");
 	const navigate = useNavigate();
 	const { register } = useAuth();
-	const selectedRole =
-		SIGNUP_ROLE_OPTIONS.find((option) => option.value === role) ||
-		SIGNUP_ROLE_OPTIONS[0];
 
 	async function submit(event) {
 		event.preventDefault();
 		setLoading(true);
 		setError("");
-		setPendingNotice("");
 
 		try {
 			const currentUser = await register({
-				fullName: fullName.trim(),
+				fullName: name.trim(),
 				email: email.trim(),
 				password,
 				role,
-				...(role === "university_admin"
-					? {
-							universityName: approvalDetails.universityName.trim(),
-							department: approvalDetails.department.trim(),
-							title: approvalDetails.title.trim(),
-							adminCode: approvalDetails.adminCode.trim(),
-							submittedDocuments: parseSubmittedDocuments(
-								approvalDetails.documentLinks,
-							),
-						}
-					: {}),
 			});
-
-			if (currentUser?.status === "pending") {
-				setPendingNotice(
-					currentUser.message ||
-						"Your university admin request is pending main admin approval.",
-				);
-				return;
-			}
 
 			navigate(getDefaultRouteForRole(currentUser?.role, currentUser), {
 				replace: true,
@@ -81,13 +49,6 @@ export default function RegisterUser() {
 		} finally {
 			setLoading(false);
 		}
-	}
-
-	function updateApprovalDetails(field, value) {
-		setApprovalDetails((current) => ({
-			...current,
-			[field]: value,
-		}));
 	}
 
 	return (
@@ -100,17 +61,16 @@ export default function RegisterUser() {
 							<ShieldCheck size={36} />
 							ValidX
 						</div>
-						<h2 className="text-2xl font-bold text-white">Create Your Account</h2>
+						<h2 className="text-2xl font-bold text-white">Create Account</h2>
 						<p className="text-gray-400 mt-2">
-							Choose the workspace role you want at signup. Organization-specific
-							scope becomes active after the related access profile is assigned.
+							Choose one admin role. Access scope can be assigned later.
 						</p>
 					</div>
 
 					<form onSubmit={submit} className="space-y-6">
 						<div>
 							<label className="block mb-1 text-sm font-medium text-gray-300">
-								Full Name
+								Name
 							</label>
 							<div className="relative">
 								<User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -118,8 +78,9 @@ export default function RegisterUser() {
 									className="w-full pl-10 pr-3 py-2.5 border border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors placeholder-gray-500"
 									type="text"
 									placeholder="Asha Patil"
-									value={fullName}
-									onChange={(event) => setFullName(event.target.value)}
+									value={name}
+									onChange={(event) => setName(event.target.value)}
+									required
 								/>
 							</div>
 						</div>
@@ -161,12 +122,13 @@ export default function RegisterUser() {
 
 						<div>
 							<label className="block mb-1 text-sm font-medium text-gray-300">
-								Signup Role
+								Role
 							</label>
 							<select
 								className="w-full rounded-lg border border-gray-600 bg-transparent px-3 py-2.5 text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
 								value={role}
 								onChange={(event) => setRole(event.target.value)}
+								required
 							>
 								{SIGNUP_ROLE_OPTIONS.map((option) => (
 									<option
@@ -178,29 +140,12 @@ export default function RegisterUser() {
 									</option>
 								))}
 							</select>
-							<p className="mt-2 text-sm text-gray-400">
-								{selectedRole?.description}
-							</p>
 						</div>
-
-						{role === "university_admin" ? (
-							<UniversityAdminRequestFields
-								details={approvalDetails}
-								onChange={updateApprovalDetails}
-							/>
-						) : null}
 
 						{error ? (
 							<div className="flex items-center gap-3 bg-rose-900/50 text-rose-300 text-sm p-3 rounded-lg border border-rose-500/30">
 								<AlertTriangle className="w-5 h-5" />
 								<span>{error}</span>
-							</div>
-						) : null}
-
-						{pendingNotice ? (
-							<div className="flex items-center gap-3 rounded-lg border border-emerald-500/30 bg-emerald-900/40 p-3 text-sm text-emerald-200">
-								<CheckCircle className="h-5 w-5" />
-								<span>{pendingNotice}</span>
 							</div>
 						) : null}
 
@@ -210,7 +155,7 @@ export default function RegisterUser() {
 							disabled={loading}
 						>
 							{loading ? <Loader className="animate-spin" /> : <UserPlus />}
-							<span>{loading ? "Creating account..." : "Create Account"}</span>
+							<span>{loading ? "Creating account..." : "Create account"}</span>
 						</Button>
 
 						<p className="text-sm text-center text-gray-400">
@@ -219,7 +164,7 @@ export default function RegisterUser() {
 								to="/login"
 								className="text-indigo-400 hover:underline font-medium"
 							>
-								Sign In
+								Sign in
 							</Link>
 						</p>
 					</form>

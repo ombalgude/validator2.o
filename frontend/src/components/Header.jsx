@@ -18,22 +18,10 @@ const AppHeader = () => (
 				Try Now
 			</Link>
 			<Link
-				to="/login-institution"
-				className="text-gray-600 hover:text-indigo-700 transition-colors duration-300 font-medium"
-			>
-				Institution Portal
-			</Link>
-			<Link
 				to="/register"
 				className="text-gray-600 hover:text-indigo-700 transition-colors duration-300 font-medium"
 			>
 				Register
-			</Link>
-			<Link
-				to="/demo"
-				className="text-gray-600 hover:text-indigo-700 transition-colors duration-300 font-medium"
-			>
-				Try Demo
 			</Link>
 			<Link
 				to="/login"

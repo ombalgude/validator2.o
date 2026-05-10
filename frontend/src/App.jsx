@@ -5,16 +5,16 @@ import { AuthProvider } from "./context/AuthContext";
 import Layout from "./components/Layout.jsx";
 import PrivateRoute from "./components/PrivateRoute.jsx";
 import PublicRoute from "./components/PublicRoute.jsx";
+import { AUTH_ROLES } from "./lib/roles.js";
 import Landing from "./pages/Landing.jsx";
 import OCRPage from "./pages/OCRPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
-import LoginInstitution from "./pages/LoginInstitution.jsx";
 import RegisterUser from "./pages/RegisterUser.jsx";
-import RegisterInstitution from "./pages/RegisterInstitution.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import CertificatesPage from "./pages/Certificates.jsx";
 import UploadPage from "./pages/Upload.jsx";
 import UniversityAdminApprovalsPage from "./pages/UniversityAdminApprovals.jsx";
+import InstituteApprovalsPage from "./pages/InstituteApprovals.jsx";
 
 function ProtectedPage({ children, roles }) {
 	return (
@@ -39,26 +39,10 @@ function App() {
 				}
 			/>
 			<Route
-				path="/login-institution"
-				element={
-					<PublicRoute>
-						<LoginInstitution />
-					</PublicRoute>
-				}
-			/>
-			<Route
 				path="/register"
 				element={
 					<PublicRoute>
 						<RegisterUser />
-					</PublicRoute>
-				}
-			/>
-			<Route
-				path="/register-institution"
-				element={
-					<PublicRoute>
-						<RegisterInstitution />
 					</PublicRoute>
 				}
 			/>
@@ -74,7 +58,7 @@ function App() {
 			<Route
 				path="/certificates"
 				element={
-					<ProtectedPage>
+					<ProtectedPage roles={AUTH_ROLES}>
 						<CertificatesPage />
 					</ProtectedPage>
 				}
@@ -83,7 +67,7 @@ function App() {
 			<Route
 				path="/upload"
 				element={
-					<ProtectedPage roles={["admin", "institution_admin", "university_admin"]}>
+					<ProtectedPage roles={["admin", "university_admin"]}>
 						<UploadPage />
 					</ProtectedPage>
 				}
@@ -93,6 +77,14 @@ function App() {
 				element={
 					<ProtectedPage roles={["admin"]}>
 						<UniversityAdminApprovalsPage />
+					</ProtectedPage>
+				}
+			/>
+			<Route
+				path="/institute-approvals"
+				element={
+					<ProtectedPage roles={["admin"]}>
+						<InstituteApprovalsPage />
 					</ProtectedPage>
 				}
 			/>
