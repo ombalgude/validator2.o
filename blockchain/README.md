@@ -20,6 +20,9 @@ PRIVATE_KEY=<issuer-private-key>
 CONTRACT_ADDRESS=<deployed-contract-address>
 ```
 
+For local development, `METAMASK_PRIVATE_KEY` is also accepted as an alias for
+`PRIVATE_KEY`.
+
 When blockchain variables are not configured, backend routes continue to run
 and return `blockchainRecorded: false` or `blockchainVerification.available:
 false`.
