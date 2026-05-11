@@ -1037,6 +1037,19 @@ def _percentage(value: Any) -> float:
     return round(max(0.0, min(100.0, numeric)), 2)
 
 
+def _json_safe(value: Any) -> Any:
+    """Convert NumPy/OpenCV values into standard JSON-serializable Python types."""
+    if isinstance(value, np.ndarray):
+        return _json_safe(value.tolist())
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(item) for item in value]
+    return value
+
+
 def _template_identifier(document_type: Optional[str], institution_name: Optional[str]) -> str:
     base_value = institution_name or document_type or "generic"
     sanitized = re.sub(r"[^a-z0-9]+", "-", str(base_value).strip().lower()).strip("-")
@@ -1169,14 +1182,14 @@ def _calculate_verification_confidence(
 def _build_tampering_output(raw_bytes: bytes) -> Dict[str, Any]:
     """Run tampering analysis and normalise the result into a consistent dict."""
     details = analyze_certificate_security(raw_bytes)
-    return {
+    return _json_safe({
         "tampering_detected": bool(details.get("tampering_detected", False)),
         "confidence_score": _percentage(details.get("confidence_score", 0)),
         "analysis_details": details.get("analysis_details", {}),
         "recommendations": details.get("recommendations", []),
         "certificate_analysis": details.get("certificate_analysis", {}),
         "is_likely_authentic": bool(details.get("is_likely_authentic", False)),
-    }
+    })
 
 
 async def _read_upload(file: UploadFile) -> tuple:

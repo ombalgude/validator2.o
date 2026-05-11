@@ -69,7 +69,7 @@ class ImageAnalyzer:
             )
             
             results["confidence_score"] = tampering_score
-            results["tampering_detected"] = tampering_score > self.tampering_threshold
+            results["tampering_detected"] = bool(tampering_score > self.tampering_threshold)
             
             # Generate recommendations
             results["recommendations"] = self._generate_recommendations(
@@ -185,8 +185,8 @@ class ImageAnalyzer:
             metadata = {
                 "format": image.format,
                 "mode": image.mode,
-                "size": image.size,
-                "has_exif": hasattr(image, '_getexif') and image._getexif() is not None,
+                "size": list(image.size),
+                "has_exif": bool(hasattr(image, '_getexif') and image._getexif() is not None),
                 "exif_data": {}
             }
             
@@ -331,7 +331,7 @@ def analyze_certificate_security(image_data: bytes) -> Dict:
         height, width = gray.shape
         bottom_region = gray[int(height * 0.8):, :]
         signature_pixels = np.sum(bottom_region < 100)  # Dark pixels
-        certificate_analysis["has_signature_area"] = signature_pixels > (width * 0.1)
+        certificate_analysis["has_signature_area"] = bool(signature_pixels > (width * 0.1))
         
         # Look for seal areas (circular patterns)
         circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, 1, 20,
@@ -357,7 +357,7 @@ def analyze_certificate_security(image_data: bytes) -> Dict:
         result = {
             **basic_analysis,
             "certificate_analysis": certificate_analysis,
-            "is_likely_authentic": (
+            "is_likely_authentic": bool(
                 not basic_analysis.get("tampering_detected", True) and
                 certificate_analysis["has_signature_area"] and
                 certificate_analysis["text_clarity"] > 0.01
