@@ -9,6 +9,8 @@ const Certificate = require('../models/Certificate');
 const Institution = require('../models/Institution');
 const VerificationLog = require('../models/VerificationLog');
 const AIService = require('./ai_service');
+const { Contract } = require('web3');
+
 const notificationService = require('./notification_instance');
 const {
   computeCertificateHash,
@@ -136,6 +138,7 @@ class CertificateService {
 
   async uploadAndVerify(file, user, input = {}, requestDetails = {}) {
     try {
+      
       const { certificate, fileBuffer } = await this.storeTrustedCertificateRecord({
         file,
         user,
