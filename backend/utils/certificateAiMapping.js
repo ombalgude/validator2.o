@@ -1,0 +1,436 @@
+const crypto = require('crypto');
+const Institution = require('../models/Institution');
+const { normalizeCertificateInput } = require('./certificatePayload');
+
+const toText = (value) => (value === null || value === undefined ? '' : String(value).trim());
+
+const escapeRegex = (value) => toText(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const normalizeDateInput = (value) => {
+  const rawValue = toText(value);
+  if (!rawValue) {
+    return '';
+  }
+
+  const parsedDate = new Date(rawValue);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return '';
+  }
+
+  return parsedDate.toISOString().slice(0, 10);
+};
+
+const MONTH_INDEX = {
+  JAN: 0,
+  JANUARY: 0,
+  FEB: 1,
+  FEBRUARY: 1,
+  MAR: 2,
+  MARCH: 2,
+  APR: 3,
+  APRIL: 3,
+  MAY: 4,
+  JUN: 5,
+  JUNE: 5,
+  JUL: 6,
+  JULY: 6,
+  AUG: 7,
+  AUGUST: 7,
+  SEP: 8,
+  SEPT: 8,
+  SEPTEMBER: 8,
+  OCT: 9,
+  OCTOBER: 9,
+  NOV: 10,
+  NOVEMBER: 10,
+  DEC: 11,
+  DECEMBER: 11,
+};
+
+const normalizeOcrDay = (value) => {
+  const text = toText(value).toUpperCase().replace(/[OQ]/g, '0');
+  const numeric = Number(text);
+  return Number.isFinite(numeric) ? String(numeric) : text;
+};
+
+const buildIsoDate = (dayValue, monthValue, yearValue) => {
+  const day = Number(normalizeOcrDay(dayValue));
+  const month = MONTH_INDEX[toText(monthValue).toUpperCase()];
+  const year = Number(yearValue);
+
+  if (!Number.isInteger(day) || day < 1 || day > 31 || month === undefined || !Number.isInteger(year)) {
+    return '';
+  }
+
+  const parsedDate = new Date(Date.UTC(year, month, day));
+  if (
+    parsedDate.getUTCFullYear() !== year ||
+    parsedDate.getUTCMonth() !== month ||
+    parsedDate.getUTCDate() !== day
+  ) {
+    return '';
+  }
+
+  return parsedDate.toISOString().slice(0, 10);
+};
+
+const extractIssueDate = (structuredData, rawText) => {
+  const explicitDate = normalizeDateInput(structuredData.issue_date || structuredData.issueDate);
+  if (explicitDate) {
+    return explicitDate;
+  }
+
+  const text = toText(rawText);
+  const labeledMatch = text.match(
+    /\bDATE\s*[:#-]?\s*([OQ0-3]?[OQ0-9]{1,2})\s*([A-Z]{3,9})\s*((?:19|20)\d{2})\b/i
+  );
+  if (labeledMatch) {
+    return buildIsoDate(labeledMatch[1], labeledMatch[2], labeledMatch[3]);
+  }
+
+  const anyDateMatch = text.match(/\b([OQ0-3]?[OQ0-9]{1,2})\s+([A-Z]{3,9})\s+((?:19|20)\d{2})\b/i);
+  return anyDateMatch ? buildIsoDate(anyDateMatch[1], anyDateMatch[2], anyDateMatch[3]) : '';
+};
+
+const extractYear = (structuredData, rawText, issueDate) => {
+  const explicitYear = toText(structuredData.exam_year || structuredData.year);
+  if (explicitYear) {
+    return explicitYear;
+  }
+
+  if (issueDate) {
+    return issueDate.slice(0, 4);
+  }
+
+  const matches = toText(rawText).match(/\b(?:19|20)\d{2}\b/g);
+  return matches?.[matches.length - 1] || '';
+};
+
+const extractSession = (structuredData, rawText, year) => {
+  const explicitSession = toText(structuredData.exam_session || structuredData.session);
+  if (explicitSession) {
+    return explicitSession;
+  }
+
+  const text = toText(rawText);
+  const marksheetSessionMatch = text.match(/\bEXAM\s*[,.:-]?\s*([A-Z]+\s*\/\s*[A-Z]+|[A-Z]+)\s+((?:19|20)\d{2})\b/i);
+  if (marksheetSessionMatch) {
+    return `${marksheetSessionMatch[1].replace(/\s*\/\s*/g, '/').toUpperCase()} ${marksheetSessionMatch[2]}`;
+  }
+
+  const sessionMatch = text.match(
+    /\b(?:summer|winter|spring|fall|autumn|monsoon|annual|semester\s+[ivx\d]+|sem\s+[ivx\d]+)\b(?:\s*[-/]\s*(?:19|20)\d{2})?/i
+  );
+
+  return sessionMatch ? sessionMatch[0].trim() : year;
+};
+
+const extractCourseFromRawText = (rawText) => {
+  const text = toText(rawText);
+  const marksheetCourseMatch = text.match(
+    /STATEMENT\s+OF\s+MARKS\s*\/?\s*GRADES\s+FOR\s+(.+?)\s+EXAM\s*[,.:-]?\s*(?:[A-Z]+\s*\/\s*[A-Z]+|[A-Z]+)\s+(?:19|20)\d{2}/i
+  );
+
+  return marksheetCourseMatch ? toText(marksheetCourseMatch[1]).toUpperCase() : '';
+};
+
+const extractInstitutionCode = (structuredData, rawText) => {
+  const explicitCode = toText(
+    structuredData.institution_code || structuredData.college_code || structuredData.code
+  );
+  if (explicitCode) {
+    return explicitCode.toUpperCase();
+  }
+
+  const codeMatch = toText(rawText).match(
+    /\b(?:college|institution|university)\s*(?:code|id)\s*[:#-]?\s*([A-Z0-9_-]{2,20})\b/i
+  );
+
+  return codeMatch ? codeMatch[1].toUpperCase() : '';
+};
+
+const extractSerialNumber = (structuredData, rawText) => {
+  const explicitSerial = toText(
+    structuredData.serial_no || structuredData.serial_number || structuredData.certificate_no
+  );
+  if (explicitSerial) {
+    return explicitSerial.toUpperCase();
+  }
+
+  const text = toText(rawText);
+  const topSerialMatch = text.match(/^\s*No\.?\s*[:#-]?\s*(?:\d+\s*[-/]\s*)?([A-Z0-9]{5,})\b/im);
+  if (topSerialMatch) {
+    return topSerialMatch[1].toUpperCase();
+  }
+
+  const bottomSerialMatch = text.match(/\bR\d{8,}\b/i);
+  if (bottomSerialMatch) {
+    return bottomSerialMatch[0].toUpperCase();
+  }
+
+  const serialMatch = text.match(
+    /\b(?:serial|certificate|cert)\s*(?:no|number|id)?\s*[:#-]?\s*([A-Z0-9_-]{4,64})\b/i
+  );
+
+  return serialMatch ? serialMatch[1].toUpperCase() : '';
+};
+
+const buildCourseCode = (value) => {
+  const words = toText(value)
+    .replace(/[^a-z0-9\s]/gi, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (words.length === 0) {
+    return '';
+  }
+
+  const initials = words.map((word) => word[0]).join('').toUpperCase();
+  if (initials.length >= 2) {
+    return initials.slice(0, 12);
+  }
+
+  return words.join('').toUpperCase().slice(0, 12);
+};
+
+const extractSgpa = (grades) => {
+  if (!grades || typeof grades !== 'object') {
+    return '';
+  }
+
+  const gradeText = Object.values(grades).join(' ');
+  const sgpaMatch = gradeText.match(/\b([0-9](?:\.[0-9]+)?|10(?:\.0+)?)\s*(?:\/\s*10)?\b/);
+  return sgpaMatch ? sgpaMatch[1] : '';
+};
+
+const toNullableNumberString = (value) => {
+  const text = toText(value);
+  if (!text) {
+    return '';
+  }
+
+  const number = Number(text);
+  return Number.isFinite(number) ? String(number) : '';
+};
+
+const mapAiSubjects = (structuredData, fallbackSubject) => {
+  const subjects = Array.isArray(structuredData.subjects) ? structuredData.subjects : [];
+  const mappedSubjects = subjects
+    .map((subject) => ({
+      courseCode: toText(subject.courseCode || subject.course_code).toUpperCase(),
+      courseName: toText(subject.courseName || subject.course_name || subject.name),
+      type: toText(subject.type).toUpperCase(),
+      credits: toNullableNumberString(subject.credits),
+      grade: toText(subject.grade).toUpperCase(),
+      creditPoints: toNullableNumberString(subject.creditPoints || subject.credit_points),
+    }))
+    .filter((subject) => subject.courseCode && subject.courseName);
+
+  return mappedSubjects.length > 0 ? mappedSubjects : [fallbackSubject];
+};
+
+const getInstitutionForExtraction = async (user, structuredData, rawText) => {
+  if (user?.role && user.role !== 'admin') {
+    const institutionId = user.institutionId || user.institution?._id || user.institution?.id;
+    if (!institutionId) {
+      return { institution: null, unresolvedInstitutionName: '' };
+    }
+
+    return {
+      institution: await Institution.findById(institutionId).select('name code'),
+      unresolvedInstitutionName: '',
+    };
+  }
+
+  const institutionName = toText(
+    structuredData.institution_name || structuredData.institution || structuredData.college_name
+  );
+  const institutionCode = extractInstitutionCode(structuredData, rawText);
+  const institutionQuery = [];
+
+  if (institutionCode) {
+    institutionQuery.push({ code: institutionCode });
+  }
+
+  if (institutionName) {
+    institutionQuery.push({ name: { $regex: escapeRegex(institutionName), $options: 'i' } });
+  }
+
+  if (institutionQuery.length === 0) {
+    return { institution: null, unresolvedInstitutionName: institutionName };
+  }
+
+  return {
+    institution: await Institution.findOne({ $or: institutionQuery }).select('name code'),
+    unresolvedInstitutionName: institutionName,
+  };
+};
+
+const buildCertificateDataFromAiResult = async ({ aiResult, fileBuffer, user = null }) => {
+  const structuredData = aiResult.structured_data || {};
+  const rawText = aiResult.text || '';
+  const issueDate = extractIssueDate(structuredData, rawText);
+  const year = extractYear(structuredData, rawText, issueDate);
+  const session = extractSession(structuredData, rawText, year);
+  const course = toText(structuredData.course || structuredData.degree) || extractCourseFromRawText(rawText);
+  const degree = toText(structuredData.degree);
+  const institutionResolution = await getInstitutionForExtraction(user, structuredData, rawText);
+  const institution = institutionResolution.institution;
+  const extractedInstitutionName = institutionResolution.unresolvedInstitutionName ||
+    toText(structuredData.institution_name || structuredData.institution || structuredData.college_name);
+  const institutionName = toText(institution?.name) || extractedInstitutionName;
+  const institutionCode = toText(institution?.code) || extractInstitutionCode(structuredData, rawText);
+  const serialNo = extractSerialNumber(structuredData, rawText);
+  const certificateId = toText(structuredData.certificate_id || structuredData.certificateId) || serialNo;
+  const subjectCourseName = toText(structuredData.subject || structuredData.subject_name) || course || degree;
+  const subjectCourseCode = toText(structuredData.subject_code) || buildCourseCode(subjectCourseName);
+  const fallbackSubject = {
+    courseCode: subjectCourseCode,
+    courseName: subjectCourseName,
+    type: degree,
+    credits: '',
+    grade: toText(structuredData.grade || structuredData.result).toUpperCase(),
+    creditPoints: '',
+  };
+  const subjects = mapAiSubjects(structuredData, fallbackSubject);
+  const documentHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+
+  const certificateData = {
+    certificateId,
+    institutionId: institution?._id ? String(institution._id) : '',
+    student: {
+      name: toText(structuredData.student_name || structuredData.studentName),
+      seatNo: toText(structuredData.roll_number || structuredData.rollNumber).toUpperCase(),
+      prn: toText(structuredData.prn).toUpperCase(),
+      motherName: toText(structuredData.mother_name || structuredData.motherName),
+    },
+    college: {
+      code: institutionCode.toUpperCase(),
+      name: institutionName,
+    },
+    exam: {
+      session,
+      year,
+      course,
+      branchCode: toText(structuredData.branch_code || structuredData.branchCode).toUpperCase(),
+    },
+    subjects,
+    summary: {
+      sgpa: toNullableNumberString(structuredData.summary_sgpa) || extractSgpa(structuredData.grades),
+      totalCredits: toNullableNumberString(structuredData.total_credits || structuredData.totalCredits),
+    },
+    issue: {
+      date: issueDate,
+      serialNo,
+    },
+  };
+
+  const requiredFields = [
+    ['certificate ID', certificateData.certificateId],
+    ['student name', certificateData.student.name],
+    ['seat number', certificateData.student.seatNo],
+    ['college code', certificateData.college.code],
+    ['college name', certificateData.college.name],
+    ['course', certificateData.exam.course],
+    ['exam session', certificateData.exam.session],
+    ['exam year', certificateData.exam.year],
+    ['issue date', certificateData.issue.date],
+    ['subject code', certificateData.subjects[0].courseCode],
+    ['subject name', certificateData.subjects[0].courseName],
+  ];
+  const missingRequiredFields = requiredFields
+    .filter(([, value]) => !toText(value))
+    .map(([label]) => label);
+  const warnings = [];
+
+  if (!toText(structuredData.certificate_id || structuredData.certificateId)) {
+    warnings.push('AI did not find a certificate number in the document.');
+  }
+
+  if (extractedInstitutionName && !institution) {
+    warnings.push(`AI extracted "${extractedInstitutionName}", but no matching institution record was found.`);
+  }
+
+  if (subjects.length === 1 && subjectCourseName && !toText(structuredData.subject || structuredData.subject_name)) {
+    warnings.push('AI did not find a subject list, so the extracted course was used for the required subject record.');
+  }
+
+  return {
+    certificateData,
+    documentHash,
+    missingRequiredFields,
+    warnings,
+  };
+};
+
+const hasDateValue = (value) => {
+  if (!value) {
+    return false;
+  }
+
+  const parsedDate = value instanceof Date ? value : new Date(value);
+  return !Number.isNaN(parsedDate.getTime());
+};
+
+const mergeCandidateCertificateData = (aiCertificateData = {}, submittedData = {}) => {
+  const aiData = normalizeCertificateInput(aiCertificateData);
+  const manualData = normalizeCertificateInput(submittedData);
+
+  return {
+    certificateId: manualData.certificateId || aiData.certificateId,
+    institutionId: manualData.institutionId || aiData.institutionId,
+    student: {
+      name: manualData.student.name || aiData.student.name,
+      seatNo: manualData.student.seatNo || aiData.student.seatNo,
+      prn: manualData.student.prn || aiData.student.prn,
+      motherName: manualData.student.motherName || aiData.student.motherName,
+    },
+    college: {
+      code: manualData.college.code || aiData.college.code,
+      name: manualData.college.name || aiData.college.name,
+    },
+    exam: {
+      session: manualData.exam.session || aiData.exam.session,
+      year: manualData.exam.year || aiData.exam.year,
+      course: manualData.exam.course || aiData.exam.course,
+      branchCode: manualData.exam.branchCode || aiData.exam.branchCode,
+    },
+    subjects: manualData.subjects.length > 0 ? manualData.subjects : aiData.subjects,
+    summary: {
+      sgpa: manualData.summary.sgpa ?? aiData.summary.sgpa,
+      totalCredits: manualData.summary.totalCredits ?? aiData.summary.totalCredits,
+    },
+    issue: {
+      date: manualData.issue.date || aiData.issue.date,
+      serialNo: manualData.issue.serialNo || aiData.issue.serialNo,
+    },
+  };
+};
+
+const getMissingComparisonFields = (candidateData = {}) => {
+  const normalized = normalizeCertificateInput(candidateData);
+  const firstSubject = normalized.subjects[0] || {};
+  const requiredFields = [
+    ['certificate ID', normalized.certificateId],
+    ['student name', normalized.student.name],
+    ['seat number', normalized.student.seatNo],
+    ['college code', normalized.college.code],
+    ['college name', normalized.college.name],
+    ['course', normalized.exam.course],
+    ['exam session', normalized.exam.session],
+    ['exam year', normalized.exam.year],
+    ['issue date', hasDateValue(normalized.issue.date)],
+    ['subject code', firstSubject.courseCode],
+    ['subject name', firstSubject.courseName],
+  ];
+
+  return requiredFields
+    .filter(([, value]) => !value)
+    .map(([label]) => label);
+};
+
+module.exports = {
+  buildCertificateDataFromAiResult,
+  getMissingComparisonFields,
+  mergeCandidateCertificateData,
+};

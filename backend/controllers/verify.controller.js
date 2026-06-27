@@ -1,14 +1,78 @@
 const { contract, isBlockchainAvailable } = require("../config/blockchain");
 const generateHash = require("../utils/hash");
 const fs = require("fs").promises;
+const AIService = require("../services/ai_service");
+const CertificateService = require("../services/certificate_service");
+const {
+    buildCertificateDataFromAiResult,
+    getMissingComparisonFields,
+    mergeCandidateCertificateData,
+} = require("../utils/certificateAiMapping");
 
+const aiService = new AIService();
+const certificateService = new CertificateService();
 
 const verifyDocument = async (req, res) => {
     try {
+        if (req.file) {
+            const fileBuffer = req.file.buffer || await fs.readFile(req.file.path);
+            const aiResult = await aiService.extractText(
+                { ...req.file, buffer: fileBuffer },
+                { document_type: "certificate" }
+            );
+
+            if (!aiResult.success) {
+                return res.status(502).json({
+                    success: false,
+                    message: aiResult.error || "AI service could not extract certificate details.",
+                });
+            }
+
+            const mappedResult = await buildCertificateDataFromAiResult({
+                aiResult,
+                fileBuffer,
+            });
+            const candidateInput = mergeCandidateCertificateData(mappedResult.certificateData, req.body);
+            const missingFields = getMissingComparisonFields(candidateInput);
+
+            if (missingFields.length > 0) {
+                return res.status(422).json({
+                    success: false,
+                    isValid: false,
+                    verificationStatus: "suspicious",
+                    message: `Candidate certificate data is missing required fields: ${missingFields.join(", ")}.`,
+                    missingRequiredFields: missingFields,
+                    extractedCertificate: mappedResult.certificateData,
+                    aiExtraction: {
+                        confidence: aiResult.confidence || 0,
+                        processingTime: aiResult.processing_time || 0,
+                        missingRequiredFields: missingFields,
+                        warnings: mappedResult.warnings,
+                    },
+                });
+            }
+
+            const verification = await certificateService.verifyPublicCandidateCertificate(
+                candidateInput,
+                { ...req.file, buffer: fileBuffer }
+            );
+
+            return res.json({
+                ...verification,
+                extractedCertificate: candidateInput,
+                aiExtraction: {
+                    confidence: aiResult.confidence || 0,
+                    processingTime: aiResult.processing_time || 0,
+                    missingRequiredFields: missingFields,
+                    warnings: mappedResult.warnings,
+                },
+            });
+        }
+
         const { documentData } = req.body;
 
         if (!documentData) {
-            return res.status(400).json({ message: "No document data" });
+            return res.status(400).json({ message: "Please upload a certificate file." });
         }
 
         const hash = generateHash(documentData);

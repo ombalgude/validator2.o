@@ -10,6 +10,7 @@ const ACCESS_TYPES = ['institution-admins', 'university-admins', 'company-admins
 const PUBLIC_ROUTE_CHECKS = [
   { method: 'POST', path: '/api/auth/register', body: {}, expectedStatus: 400, expectedMessage: 'Validation failed' },
   { method: 'POST', path: '/api/auth/login', body: {}, expectedStatus: 400, expectedMessage: 'Validation failed' },
+  { method: 'POST', path: '/api/verify', body: {}, expectedStatus: 400, expectedMessage: 'Please upload a certificate file.' },
 ];
 
 const PRIVATE_ROUTE_CHECKS = [

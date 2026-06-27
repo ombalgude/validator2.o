@@ -25,7 +25,7 @@ export default function Landing()
 				</div>
 				<nav className="flex items-center gap-6">
 					<Link
-						to="/demo"
+						to="/verify"
 						className="text-gray-600 hover:text-indigo-700 transition-colors duration-300 font-medium"
 					>
 						Try Now
@@ -78,7 +78,7 @@ export default function Landing()
 							updates and streamlined workflows for institutions.
 						</p>
 						<div className="mt-10 flex flex-col sm:flex-row gap-4">
-							<Link to="/demo" className="inline-block">
+							<Link to="/verify" className="inline-block">
 								<Button className="flex items-center gap-2 px-8 py-4 bg-indigo-600 text-white text-lg font-semibold rounded-xl shadow-lg hover:bg-indigo-700 transition-all duration-300 transform hover:-translate-y-1 hover:scale-105">
 									<CloudUpload className="w-6 h-6" />
 									Verify a Certificate

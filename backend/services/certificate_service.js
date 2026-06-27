@@ -371,6 +371,49 @@ class CertificateService {
     }
   }
 
+  async verifyPublicCandidateCertificate(input, file = null) {
+    try {
+      const candidate = await this.buildCandidateSnapshot(input, file);
+      const trustedMatch = await this.findTrustedCertificateMatch(candidate);
+      const blockchainVerification = await this.verifyCandidateOnBlockchain(candidate);
+      const comparison = this.evaluateCandidateMatch(candidate, trustedMatch, blockchainVerification);
+
+      return {
+        success: true,
+        isValid: comparison.isMatch,
+        isMatch: comparison.isMatch,
+        verificationStatus: comparison.verificationStatus,
+        matchType: comparison.matchType,
+        message: comparison.message,
+        candidateCertificate: {
+          certificateId: candidate.certificateId,
+          certificateHash: candidate.certificateHash,
+          documentHash: candidate.documentHash,
+          studentName: candidate.searchFields.studentName,
+          rollNumber: candidate.searchFields.rollNumber,
+          course: candidate.searchFields.course,
+          issueDate: candidate.searchFields.issueDate,
+        },
+        blockchainVerification,
+        trustedCertificate: trustedMatch.certificate
+          ? {
+              certificateId: trustedMatch.certificate.certificateId,
+              verificationStatus: trustedMatch.certificate.verificationStatus,
+              studentName: trustedMatch.certificate.studentName,
+              rollNumber: trustedMatch.certificate.rollNumber,
+              course: trustedMatch.certificate.course,
+              issueDate: trustedMatch.certificate.issueDate,
+              institutionName: trustedMatch.certificate.institutionName,
+              institutionCode: trustedMatch.certificate.institutionCode,
+            }
+          : null,
+      };
+    } catch (error) {
+      console.error('Error in verifyPublicCandidateCertificate:', error);
+      throw this.wrapUnexpectedError(error, 'Public certificate verification failed');
+    }
+  }
+
   async performAIVerification(file) {
     try {
       const startTime = Date.now();

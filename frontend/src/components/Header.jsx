@@ -12,7 +12,7 @@ const AppHeader = () => (
 		</div>
 		<nav className="flex items-center gap-6">
 			<Link
-				to="/demo"
+				to="/verify"
 				className="text-gray-600 hover:text-indigo-700 transition-colors duration-300 font-medium"
 			>
 				Try Now

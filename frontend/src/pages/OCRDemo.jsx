@@ -1,18 +1,15 @@
 import {
-	Check,
-	Copy,
 	FileText,
 	Loader,
 	RefreshCw,
 	UploadCloud,
 	XCircle,
 } from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
-import Tesseract from "tesseract.js";
+import React, { useEffect, useState } from "react";
 import Button from "../components/Button";
 import AppFooter from "../components/Footer";
 import AppHeader from "../components/Header";
-import { api, publicApi } from "../lib/api";
+import { publicApi } from "../lib/api";
 import useAuth from "../hooks/useAuth";
 
 function getErrorMessage(error, fallback) {
@@ -21,12 +18,13 @@ function getErrorMessage(error, fallback) {
 
 const OCRDemo = () => {
 	const [imageData, setImageData] = useState(null);
+	const [selectedFile, setSelectedFile] = useState(null);
 	const [selectedFileName, setSelectedFileName] = useState("");
-	const [isLoading, setIsLoading] = useState(false);
+	const [verifyLoading, setVerifyLoading] = useState(false);
 	const [statusText, setStatusText] = useState("");
-	const [isCopied, setIsCopied] = useState(false);
 	const [ocrResult, setOcrResult] = useState("");
 	const [confidenceScore, setConfidenceScore] = useState(null);
+	const [verifyResult, setVerifyResult] = useState(null);
 	const [healthStatus, setHealthStatus] = useState({
 		loading: true,
 		ok: false,
@@ -34,7 +32,6 @@ const OCRDemo = () => {
 	});
 	const [verifyError, setVerifyError] = useState("");
 	const [socketNotice, setSocketNotice] = useState("");
-	const workerRef = useRef(null);
 	const { lastStatusUpdate } = useAuth();
 
 	useEffect(() => {
@@ -70,20 +67,6 @@ const OCRDemo = () => {
 	}, []);
 
 	useEffect(() => {
-		const setupWorker = async () => {
-			const worker = await Tesseract.createWorker("eng");
-			workerRef.current = worker;
-		};
-
-		setupWorker();
-
-		return () => {
-			workerRef.current?.terminate();
-			workerRef.current = null;
-		};
-	}, []);
-
-	useEffect(() => {
 		if (!lastStatusUpdate?.certificateId) {
 			return;
 		}
@@ -96,21 +79,13 @@ const OCRDemo = () => {
 
 	function handleReset() {
 		setImageData(null);
+		setSelectedFile(null);
 		setSelectedFileName("");
 		setOcrResult("");
 		setConfidenceScore(null);
-		setIsCopied(false);
 		setStatusText("");
 		setVerifyError("");
-	}
-
-	function handleCopy() {
-		if (!ocrResult) {
-			return;
-		}
-
-		navigator.clipboard.writeText(ocrResult);
-		setIsCopied(true);
+		setVerifyResult(null);
 	}
 
 	function loadFile(file) {
@@ -121,37 +96,42 @@ const OCRDemo = () => {
 		const reader = new FileReader();
 		reader.onloadend = () => {
 			setImageData(reader.result);
+			setSelectedFile(file);
 			setSelectedFileName(file.name || "");
-			setIsCopied(false);
 			setOcrResult("");
 			setConfidenceScore(null);
 			setVerifyError("");
+			setVerifyResult(null);
 		};
 		reader.readAsDataURL(file);
 	}
 
-	async function handleExtractValue() {
-		if (!imageData || !workerRef.current) {
+	async function handleVerifyCertificate() {
+		if (!selectedFile) {
 			return;
 		}
 
-		setIsLoading(true);
-		setStatusText("Recognizing text...");
+		const formData = new FormData();
+		formData.append("certificate", selectedFile);
+
+		setVerifyLoading(true);
 		setVerifyError("");
+		setVerifyResult(null);
+		setStatusText("Verifying certificate...");
 
 		try {
-			const response = await workerRef.current.recognize(imageData);
-			const extractedText = response.data?.text || "";
-			const nextConfidenceScore = response.data?.confidence || 0;
-
-			setOcrResult(extractedText);
-			setConfidenceScore(nextConfidenceScore);
-			setStatusText("OCR extraction complete.");
+			const response = await publicApi.post("/verify", formData);
+			setVerifyResult(response.data || {});
+			setConfidenceScore(response.data?.aiExtraction?.confidence ?? null);
+			setOcrResult(
+				JSON.stringify(response.data?.extractedCertificate || {}, null, 2)
+			);
+			setStatusText("Verification complete.");
 		} catch (error) {
-			setStatusText("Failed to extract text.");
-			setVerifyError(getErrorMessage(error, "OCR extraction failed."));
+			setStatusText("Verification failed.");
+			setVerifyError(getErrorMessage(error, "Certificate verification failed."));
 		} finally {
-			setIsLoading(false);
+			setVerifyLoading(false);
 		}
 	}
 
@@ -191,9 +171,9 @@ const OCRDemo = () => {
 					<div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
 						<div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
 							<div>
-								<h1 className="text-3xl font-bold text-gray-900">OCR Demo</h1>
+								<h1 className="text-3xl font-bold text-gray-900">Verify Certificate</h1>
 								<p className="text-gray-600">
-									Extract text locally and check service availability.
+									Upload a certificate and verify it through the backend AI pipeline.
 								</p>
 							</div>
 							<div className="flex flex-wrap items-center gap-2">
@@ -214,7 +194,7 @@ const OCRDemo = () => {
 											loading: true,
 										}));
 										try {
-											const response = await api.get("/health");
+											const response = await publicApi.get("/health");
 											setHealthStatus({
 												loading: false,
 												ok: true,
@@ -300,53 +280,39 @@ const OCRDemo = () => {
 
 							<div className="flex flex-col gap-6">
 								<div className="flex-grow bg-gray-900 text-gray-50 rounded-xl p-6 relative h-96 overflow-y-auto font-mono text-sm shadow-inner">
-									{isLoading ? (
+									{verifyLoading ? (
 										<div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/85 z-10">
 											<Loader className="w-12 h-12 text-indigo-400 animate-spin" />
 											<p className="mt-4 text-lg">{statusText}</p>
 										</div>
 									) : null}
-									{!ocrResult && !isLoading ? (
+									{!ocrResult && !verifyLoading ? (
 										<div className="text-center text-gray-400 h-full flex flex-col justify-center items-center">
 											<FileText size={48} className="mb-4 opacity-50" />
-											<p>Extracted text will appear here.</p>
+											<p>Verification details will appear here.</p>
 										</div>
 									) : null}
 									{ocrResult ? (
-										<>
-											<button
-												type="button"
-												onClick={handleCopy}
-												className="absolute bottom-3 right-3 p-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors"
-												title="Copy to clipboard"
-											>
-												{isCopied ? (
-													<Check className="text-emerald-400" />
-												) : (
-													<Copy />
-												)}
-											</button>
-											<pre className="whitespace-pre-wrap">{ocrResult}</pre>
-										</>
+										<pre className="whitespace-pre-wrap">{ocrResult}</pre>
 									) : null}
 								</div>
 
 								<div className="grid grid-cols-1 gap-3">
 									<Button
 										type="button"
-										className="w-full justify-center bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-										onClick={handleExtractValue}
-										disabled={!imageData || isLoading}
+										className="w-full justify-center bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+										onClick={handleVerifyCertificate}
+										disabled={!selectedFile || verifyLoading}
 									>
-										{isLoading ? (
+										{verifyLoading ? (
 											<>
 												<Loader className="animate-spin" />
-												Processing...
+												Verifying...
 											</>
 										) : (
 											<>
 												<FileText />
-												Extract Text
+												Verify Certificate
 											</>
 										)}
 									</Button>
@@ -368,6 +334,49 @@ const OCRDemo = () => {
 						{verifyError ? (
 							<div className="mt-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
 								{verifyError}
+							</div>
+						) : null}
+
+						{verifyResult ? (
+							<div
+								className={`mt-6 rounded-xl border px-4 py-4 text-sm ${
+									verifyResult.isValid
+										? "border-emerald-200 bg-emerald-50 text-emerald-800"
+										: "border-rose-200 bg-rose-50 text-rose-800"
+								}`}
+							>
+								<div className="text-base font-semibold">
+									{verifyResult.isValid
+										? "Certificate is valid"
+										: "Certificate is invalid"}
+								</div>
+								<p className="mt-1">{verifyResult.message}</p>
+								<div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+									<div>
+										<span className="block text-xs uppercase tracking-wide opacity-70">
+											Status
+										</span>
+										<span className="font-semibold capitalize">
+											{verifyResult.verificationStatus || "unknown"}
+										</span>
+									</div>
+									<div>
+										<span className="block text-xs uppercase tracking-wide opacity-70">
+											Certificate ID
+										</span>
+										<span className="font-semibold">
+											{verifyResult.candidateCertificate?.certificateId || "--"}
+										</span>
+									</div>
+									<div>
+										<span className="block text-xs uppercase tracking-wide opacity-70">
+											Match
+										</span>
+										<span className="font-semibold">
+											{verifyResult.matchType || "No trusted match"}
+										</span>
+									</div>
+								</div>
 							</div>
 						) : null}
 

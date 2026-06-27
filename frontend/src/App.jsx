@@ -28,6 +28,7 @@ function App() {
 	return (
 		<Routes>
 			<Route path="/" element={<Landing />} />
+			<Route path="/verify" element={<OCRDemo />} />
 			<Route path="/demo" element={<OCRDemo />} />
 
 			<Route
