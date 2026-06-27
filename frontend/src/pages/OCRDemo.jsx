@@ -376,6 +376,16 @@ const OCRDemo = () => {
 											{verifyResult.matchType || "No trusted match"}
 										</span>
 									</div>
+									<div>
+										<span className="block text-xs uppercase tracking-wide opacity-70">
+											Data matched
+										</span>
+										<span className="font-semibold">
+											{typeof verifyResult.matchPercentage === "number"
+												? `${verifyResult.matchPercentage}%`
+												: "--"}
+										</span>
+									</div>
 								</div>
 							</div>
 						) : null}

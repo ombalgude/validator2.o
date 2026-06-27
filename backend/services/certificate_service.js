@@ -73,6 +73,31 @@ const buildPaginationResult = (page, limit, total) => ({
   pages: Math.ceil(total / limit),
 });
 
+const PUBLIC_MATCH_THRESHOLD = 80;
+
+const normalizeComparableText = (value) =>
+  String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, ' ');
+
+const normalizeComparableDate = (value) => {
+  if (!value) {
+    return '';
+  }
+
+  const parsedDate = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(parsedDate.getTime()) ? '' : parsedDate.toISOString().slice(0, 10);
+};
+
+const getSubjectValue = (subjects, index, field) => {
+  if (!Array.isArray(subjects) || !subjects[index]) {
+    return '';
+  }
+
+  return subjects[index][field];
+};
+
 class CertificateService {
   constructor({ aiService, notificationService: injectedNotificationService } = {}) {
     this.aiService = aiService || new AIService();
@@ -376,7 +401,7 @@ class CertificateService {
       const candidate = await this.buildCandidateSnapshot(input, file);
       const trustedMatch = await this.findTrustedCertificateMatch(candidate);
       const blockchainVerification = await this.verifyCandidateOnBlockchain(candidate);
-      const comparison = this.evaluateCandidateMatch(candidate, trustedMatch, blockchainVerification);
+      const comparison = this.evaluatePublicCandidateMatch(candidate, trustedMatch, blockchainVerification);
 
       return {
         success: true,
@@ -384,6 +409,9 @@ class CertificateService {
         isMatch: comparison.isMatch,
         verificationStatus: comparison.verificationStatus,
         matchType: comparison.matchType,
+        matchPercentage: comparison.matchPercentage,
+        matchThreshold: PUBLIC_MATCH_THRESHOLD,
+        fieldMatches: comparison.fieldMatches,
         message: comparison.message,
         candidateCertificate: {
           certificateId: candidate.certificateId,
@@ -412,6 +440,141 @@ class CertificateService {
       console.error('Error in verifyPublicCandidateCertificate:', error);
       throw this.wrapUnexpectedError(error, 'Public certificate verification failed');
     }
+  }
+
+  scoreCandidateAgainstTrustedCertificate(candidate, trustedCertificate) {
+    const candidateInput = candidate.normalizedInput;
+    const trustedInput = normalizeCertificateInput({
+      certificateId: trustedCertificate.certificateId,
+      student: trustedCertificate.student,
+      college: trustedCertificate.college,
+      exam: trustedCertificate.exam,
+      subjects: trustedCertificate.subjects,
+      summary: trustedCertificate.summary,
+      issue: trustedCertificate.issue,
+    });
+
+    const comparisonFields = [
+      ['certificate ID', candidateInput.certificateId, trustedInput.certificateId, 'text'],
+      ['student name', candidateInput.student.name, trustedInput.student.name, 'text'],
+      ['seat number', candidateInput.student.seatNo, trustedInput.student.seatNo, 'text'],
+      ['PRN', candidateInput.student.prn, trustedInput.student.prn, 'text'],
+      ['college code', candidateInput.college.code, trustedInput.college.code, 'text'],
+      ['college name', candidateInput.college.name, trustedInput.college.name, 'text'],
+      ['course', candidateInput.exam.course, trustedInput.exam.course, 'text'],
+      ['exam session', candidateInput.exam.session, trustedInput.exam.session, 'text'],
+      ['exam year', candidateInput.exam.year, trustedInput.exam.year, 'text'],
+      ['issue date', candidateInput.issue.date, trustedInput.issue.date, 'date'],
+      ['serial number', candidateInput.issue.serialNo, trustedInput.issue.serialNo, 'text'],
+      [
+        'subject code',
+        getSubjectValue(candidateInput.subjects, 0, 'courseCode'),
+        getSubjectValue(trustedInput.subjects, 0, 'courseCode'),
+        'text',
+      ],
+      [
+        'subject name',
+        getSubjectValue(candidateInput.subjects, 0, 'courseName'),
+        getSubjectValue(trustedInput.subjects, 0, 'courseName'),
+        'text',
+      ],
+      [
+        'subject grade',
+        getSubjectValue(candidateInput.subjects, 0, 'grade'),
+        getSubjectValue(trustedInput.subjects, 0, 'grade'),
+        'text',
+      ],
+      ['SGPA', candidateInput.summary.sgpa, trustedInput.summary.sgpa, 'number'],
+      ['total credits', candidateInput.summary.totalCredits, trustedInput.summary.totalCredits, 'number'],
+    ];
+
+    const fieldMatches = comparisonFields
+      .map(([field, candidateValue, trustedValue, type]) => {
+        const normalizedCandidate = type === 'date'
+          ? normalizeComparableDate(candidateValue)
+          : type === 'number'
+            ? String(candidateValue ?? '')
+            : normalizeComparableText(candidateValue);
+        const normalizedTrusted = type === 'date'
+          ? normalizeComparableDate(trustedValue)
+          : type === 'number'
+            ? String(trustedValue ?? '')
+            : normalizeComparableText(trustedValue);
+
+        if (!normalizedTrusted) {
+          return null;
+        }
+
+        return {
+          field,
+          matched: normalizedCandidate === normalizedTrusted,
+          candidateValue: normalizedCandidate,
+          trustedValue: normalizedTrusted,
+        };
+      })
+      .filter(Boolean);
+
+    const matchedCount = fieldMatches.filter((field) => field.matched).length;
+    const totalCount = fieldMatches.length;
+    const matchPercentage = totalCount > 0
+      ? Math.round((matchedCount / totalCount) * 100)
+      : 0;
+
+    return {
+      matchedCount,
+      totalCount,
+      matchPercentage,
+      fieldMatches,
+    };
+  }
+
+  evaluatePublicCandidateMatch(candidate, trustedMatch, blockchainVerification = {}) {
+    if (!trustedMatch.certificate) {
+      if (blockchainVerification.verified) {
+        return {
+          isMatch: true,
+          verificationStatus: 'verified',
+          matchType: 'blockchain_hash',
+          matchPercentage: 100,
+          fieldMatches: [],
+          message: 'Certificate hash was verified on blockchain',
+        };
+      }
+
+      return {
+        isMatch: false,
+        verificationStatus: 'fake',
+        matchType: null,
+        matchPercentage: 0,
+        fieldMatches: [],
+        message: 'No trusted university certificate record was found for this document',
+      };
+    }
+
+    if (trustedMatch.certificate.certificateHash === candidate.certificateHash) {
+      return {
+        isMatch: true,
+        verificationStatus: 'verified',
+        matchType: 'certificate_hash',
+        matchPercentage: 100,
+        fieldMatches: this.scoreCandidateAgainstTrustedCertificate(candidate, trustedMatch.certificate).fieldMatches,
+        message: 'Certificate matches the trusted university record',
+      };
+    }
+
+    const score = this.scoreCandidateAgainstTrustedCertificate(candidate, trustedMatch.certificate);
+    const isMatch = score.matchPercentage >= PUBLIC_MATCH_THRESHOLD;
+
+    return {
+      isMatch,
+      verificationStatus: isMatch ? 'verified' : 'fake',
+      matchType: trustedMatch.matchType || 'field_similarity',
+      matchPercentage: score.matchPercentage,
+      fieldMatches: score.fieldMatches,
+      message: isMatch
+        ? `Certificate is valid because ${score.matchPercentage}% of trusted data matched.`
+        : `Certificate is invalid because only ${score.matchPercentage}% of trusted data matched.`,
+    };
   }
 
   async performAIVerification(file) {

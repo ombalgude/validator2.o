@@ -331,6 +331,118 @@ describe('CertificateService', () => {
     assert.equal(result.trustedCertificate, null);
   });
 
+  test('verifyPublicCandidateCertificate returns valid when at least 80 percent of data matches', async () => {
+    const service = createService();
+    const trustedCertificate = {
+      _id: 'cert-public-1',
+      certificateId: 'CERT-123',
+      certificateHash: 'f'.repeat(64),
+      institutionId: 'inst-1',
+      uploadedBy: 'user-1',
+      student: SAMPLE_CERTIFICATE_INPUT.student,
+      college: SAMPLE_CERTIFICATE_INPUT.college,
+      exam: SAMPLE_CERTIFICATE_INPUT.exam,
+      subjects: SAMPLE_CERTIFICATE_INPUT.subjects,
+      summary: SAMPLE_CERTIFICATE_INPUT.summary,
+      issue: { date: new Date('2025-06-01'), serialNo: 'SER-1' },
+      studentName: 'Asha Patil',
+      rollNumber: 'SEAT-101',
+      course: 'B.Tech',
+      issueDate: new Date('2025-06-01'),
+      verificationStatus: 'pending',
+      institutionName: 'Engineering College',
+      institutionCode: 'ENG01',
+    };
+    const candidateInput = {
+      ...SAMPLE_CERTIFICATE_INPUT,
+      student: {
+        ...SAMPLE_CERTIFICATE_INPUT.student,
+        name: 'Asha P.',
+      },
+      college: {
+        ...SAMPLE_CERTIFICATE_INPUT.college,
+        name: 'Engg College',
+      },
+      subjects: [
+        {
+          ...SAMPLE_CERTIFICATE_INPUT.subjects[0],
+          grade: 'B',
+        },
+      ],
+    };
+
+    Certificate.findOne = async (query) => {
+      if (query.certificateHash) {
+        return null;
+      }
+
+      return query.certificateId === 'CERT-123' ? trustedCertificate : null;
+    };
+
+    const result = await service.verifyPublicCandidateCertificate(candidateInput);
+
+    assert.equal(result.isValid, true);
+    assert.equal(result.verificationStatus, 'verified');
+    assert.equal(result.matchThreshold, 80);
+    assert.equal(result.matchPercentage, 81);
+    assert.equal(result.matchType, 'certificate_id');
+  });
+
+  test('verifyPublicCandidateCertificate returns invalid when less than 80 percent of data matches', async () => {
+    const service = createService();
+    const trustedCertificate = {
+      _id: 'cert-public-2',
+      certificateId: 'CERT-123',
+      certificateHash: 'f'.repeat(64),
+      institutionId: 'inst-1',
+      uploadedBy: 'user-1',
+      student: SAMPLE_CERTIFICATE_INPUT.student,
+      college: SAMPLE_CERTIFICATE_INPUT.college,
+      exam: SAMPLE_CERTIFICATE_INPUT.exam,
+      subjects: SAMPLE_CERTIFICATE_INPUT.subjects,
+      summary: SAMPLE_CERTIFICATE_INPUT.summary,
+      issue: { date: new Date('2025-06-01'), serialNo: 'SER-1' },
+      studentName: 'Asha Patil',
+      rollNumber: 'SEAT-101',
+      course: 'B.Tech',
+      issueDate: new Date('2025-06-01'),
+      verificationStatus: 'pending',
+      institutionName: 'Engineering College',
+      institutionCode: 'ENG01',
+    };
+    const candidateInput = {
+      ...SAMPLE_CERTIFICATE_INPUT,
+      student: {
+        name: 'Different Student',
+        seatNo: 'SEAT-999',
+        prn: 'PRN-999',
+      },
+      college: {
+        code: 'DIFF01',
+        name: 'Different College',
+      },
+      exam: {
+        ...SAMPLE_CERTIFICATE_INPUT.exam,
+        course: 'M.Tech',
+      },
+    };
+
+    Certificate.findOne = async (query) => {
+      if (query.certificateHash) {
+        return null;
+      }
+
+      return query.certificateId === 'CERT-123' ? trustedCertificate : null;
+    };
+
+    const result = await service.verifyPublicCandidateCertificate(candidateInput);
+
+    assert.equal(result.isValid, false);
+    assert.equal(result.verificationStatus, 'fake');
+    assert.equal(result.matchPercentage < 80, true);
+    assert.ok(result.message.includes('invalid'));
+  });
+
   test('formatCertificateForResponse does not expose raw OCR text', () => {
     const service = createService();
     const response = service.formatCertificateForResponse({

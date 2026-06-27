@@ -6,6 +6,7 @@ import {
 	canManageInstituteApprovals,
 	canManageUniversityAdminApprovals,
 	canUploadTrustedCertificates,
+	isKnownRole,
 } from "../lib/roles";
 
 export default function Sidebar() {
@@ -27,6 +28,14 @@ export default function Sidebar() {
 			>
 				Certificates
 			</Link>
+			{isKnownRole(user?.role) ? (
+				<Link
+					className="block px-2 py-2 rounded hover:bg-slate-100"
+					to="/verify"
+				>
+					Verify Certificate
+				</Link>
+			) : null}
 			{canUploadTrustedCertificates(user?.role) ? (
 				<Link
 					className="block px-2 py-2 rounded hover:bg-slate-100"
