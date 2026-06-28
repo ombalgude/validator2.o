@@ -40,7 +40,7 @@ const verifyDocument = async (req, res) => {
                     success: false,
                     isValid: false,
                     verificationStatus: "suspicious",
-                    message: `Candidate certificate data is missing required fields: ${missingFields.join(", ")}.`,
+                    message: `Warning : This is falty certificate`,
                     missingRequiredFields: missingFields,
                     extractedCertificate: mappedResult.certificateData,
                     aiExtraction: {

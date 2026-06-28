@@ -572,8 +572,8 @@ class CertificateService {
       matchPercentage: score.matchPercentage,
       fieldMatches: score.fieldMatches,
       message: isMatch
-        ? `Certificate is valid because ${score.matchPercentage}% of trusted data matched.`
-        : `Certificate is invalid because only ${score.matchPercentage}% of trusted data matched.`,
+        ? `Certificate is valid`
+        : `Warning : This is falty certificate`,
     };
   }
 
